@@ -21,6 +21,9 @@
  *  - Duplicate SSN: a submission whose SSN is already on the tab is NOT saved. It is logged
  *    in "Access Log" (last 4 digits only) and the staff member gets an email saying why.
  *
+ *  - State Born In is a dropdown of US states and territories (stored as the 2-letter code),
+ *    plus "Born outside the US" (stored as "Outside US").
+ *
  * Already set up? After pasting this version, run "Ironclad Forms" -> "Update validation"
  * once (approve the new email permission). It updates the existing forms in place;
  * the form links do not change.
@@ -53,7 +56,6 @@ const RULES = {
   name: { re: "[A-Za-z][A-Za-z .,'-]*[A-Za-z.]", msg: 'Letters only (spaces, . , \' - allowed).' },
   phone: { re: '[(]?[2-9][0-9]{2}[)]?[ .-]?[0-9]{3}[ .-]?[0-9]{4}', msg: 'US phone, 10 digits, e.g. 2107257036 or (210) 725-7036.' },
   email: { re: 'N/A|n/a|[^@ ]+@[^@ ]+[.][A-Za-z]{2,}', msg: 'A valid email, or N/A if none.' },
-  state: { re: "[A-Za-z]{2}|[A-Za-z][A-Za-z .'-]{2,}", msg: '2-letter state code (e.g. TX), or the country name if born outside the US.' },
   coverage: { re: '[0-9]+([.][0-9]+)? ?[kK]', msg: 'Amount in thousands, e.g. 5k or 15k.' },
   premium: { number: [1, 10000], msg: 'Monthly premium in dollars, numbers only, e.g. 45.50.' },
   ssn: { re: '[0-9]{3}[- ]?[0-9]{2}[- ]?[0-9]{4}', msg: 'SSN: 9 digits, e.g. 123-45-6789.' },
@@ -61,6 +63,26 @@ const RULES = {
   account: { re: '[0-9]{4,17}', msg: 'Account number: 4 to 17 digits, numbers only.' },
   heightWeight: { re: '[3-7]([.][0-9]{1,2})?/[0-9]{2,3}', msg: 'Feet.inches/pounds, e.g. 5.9/138 or 5.11/260.' },
 };
+
+// "State Born In" dropdown. The form shows "Texas (TX)"; the sheet stores the code "TX".
+const US_STATES = [
+  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'],
+  ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'District of Columbia'],
+  ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'],
+  ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'],
+  ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'],
+  ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'],
+  ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'],
+  ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'], ['OR', 'Oregon'],
+  ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'],
+  ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'],
+  ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+  ['PR', 'Puerto Rico'], ['GU', 'Guam'], ['VI', 'U.S. Virgin Islands'], ['AS', 'American Samoa'],
+  ['MP', 'Northern Mariana Islands'],
+];
+const OUTSIDE_US = 'Outside US';
+const stateChoices_ = () => US_STATES.map(([c, n]) => n + ' (' + c + ')').concat(['Born outside the US']);
+const stateCode_ = v => (String(v).match(/\(([A-Z]{2})\)$/) || [])[1] || OUTSIDE_US;
 
 // Stored as plain text in the sheet so leading zeros are kept.
 const TEXT_RULES = ['ssn', 'routing', 'account'];
@@ -73,7 +95,7 @@ const SALES_FIELDS = [
   { header: 'Address', title: 'Address', type: 'para' },
   { header: 'Email', title: 'Email', type: 'text', rule: 'email', help: 'Write N/A if none.' },
   { header: 'Gender', title: 'Gender', type: 'choice', seed: ['Male', 'Female'], fixed: true },
-  { header: 'State Born in', title: 'State Born In', type: 'text', rule: 'state' },
+  { header: 'State Born in', title: 'State Born In', type: 'state' },
   { header: 'Date Of Birth', title: 'Date of Birth', type: 'date' },
   { header: 'Coverage', title: 'Coverage', type: 'text', rule: 'coverage', help: 'e.g. 5k' },
   { header: 'Carrier', title: 'Carrier', type: 'choice' },
@@ -104,7 +126,7 @@ const DUPES_FIELDS = [
   { header: 'PHONE', title: 'Phone', type: 'text', required: true, rule: 'phone' },
   { header: 'E-MAIL', title: 'Email', type: 'text', rule: 'email', help: 'Write N/A if none.' },
   { header: 'GENDER', title: 'Gender', type: 'choice', seed: ['Male', 'Female'], fixed: true },
-  { header: 'BORN ST', title: 'State Born In', type: 'text', rule: 'state' },
+  { header: 'BORN ST', title: 'State Born In', type: 'state' },
   { header: 'DOB', title: 'Date of Birth', type: 'date' },
   { header: 'EXISTING INS', title: 'Existing Insurance', type: 'text' },
   { header: 'HEIGHT/WEIGHT', title: 'Height / Weight', type: 'text', rule: 'heightWeight', help: 'e.g. 5.9/138' },
@@ -182,6 +204,7 @@ function buildItems_(form, fields, sheet) {
     switch (f.type) {
       case 'para': item = form.addParagraphTextItem(); break;
       case 'date': item = form.addDateItem(); break;
+      case 'state': item = form.addListItem().setChoiceValues(stateChoices_()); break;
       case 'choice':
         item = form.addMultipleChoiceItem();
         item.setChoiceValues(choicesFor_(sheet, f)).showOtherOption(!f.fixed);
@@ -217,10 +240,26 @@ function updateValidation() {
       const it = items.find(i => i.getTitle() === f.title);
       if (it) applyRule_(it.asTextItem().setHelpText(f.help || ''), f);
     });
+    FORMS[key].fields.filter(f => f.type === 'state').forEach(f => makeStateDropdown_(form, f));
   });
   refreshChoices(); // removes "Other" from the fixed lists
   applySheetValidation();
   try { SpreadsheetApp.getUi().alert('Validation updated on both forms and the Sales / Dupes tabs.'); } catch (e) {}
+}
+
+// Turns the form's old "State Born In" text box into the dropdown, in the same position.
+function makeStateDropdown_(form, f) {
+  const old = form.getItems().find(i => i.getTitle() === f.title);
+  if (old && old.getType() === FormApp.ItemType.LIST) {
+    old.asListItem().setChoiceValues(stateChoices_());
+    return;
+  }
+  const item = form.addListItem().setTitle(f.title).setRequired(!!f.required).setChoiceValues(stateChoices_());
+  if (f.help) item.setHelpText(f.help);
+  if (!old) return;
+  const index = old.getIndex();
+  form.deleteItem(old);
+  form.moveItem(item, index);
 }
 
 // Data validation on the sheet columns, so typing straight into the sheet is checked too.
@@ -232,11 +271,14 @@ function applySheetValidation() {
     const sheet = mustGetSheet_(ss, cfg.tab);
     const hdr = headerMap_(sheet);
     cfg.fields.forEach(f => {
-      if (!f.rule && !f.fixed) return;
+      if (!f.rule && !f.fixed && f.type !== 'state') return;
       const col = hdr[norm_(f.header)] + 1;
       const range = sheet.getRange(2, col, sheet.getMaxRows() - 1, 1);
       const dv = SpreadsheetApp.newDataValidation().setAllowInvalid(false);
-      if (f.fixed) {
+      if (f.type === 'state') {
+        dv.requireValueInList(US_STATES.map(x => x[0]).concat([OUTSIDE_US]), true)
+          .setHelpText('Pick the 2-letter state code, or ' + OUTSIDE_US + '.');
+      } else if (f.fixed) {
         dv.requireValueInList(f.seed, true).setHelpText('Pick from the list: ' + f.seed.join(', '));
       } else if (RULES[f.rule].number) {
         dv.requireNumberBetween(RULES[f.rule].number[0], RULES[f.rule].number[1]).setHelpText(RULES[f.rule].msg);
@@ -339,7 +381,6 @@ function clean_(rule, v) {
   switch (rule) {
     case 'ssn': return d.slice(0, 3) + '-' + d.slice(3, 5) + '-' + d.slice(5);
     case 'phone': case 'routing': case 'account': return d;
-    case 'state': return /^[a-z]{2}$/i.test(v) ? v.toUpperCase() : v;
     case 'coverage': return v.replace(/ /g, '').toLowerCase();
     case 'email': return /^n\/a$/i.test(v) ? 'N/A' : v.toLowerCase();
     default: return v;
@@ -376,6 +417,7 @@ function handleSubmit_(e, cfg) {
       if (!f) return;
       let v = ir.getResponse();
       if (f.type === 'date' && v) v = toDate_(v);
+      if (f.type === 'state' && v) v = stateCode_(v);
       if (f.rule && v) v = clean_(f.rule, v);
       row[hdr[norm_(f.header)]] = v;
     });
