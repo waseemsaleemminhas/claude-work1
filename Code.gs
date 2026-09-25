@@ -132,6 +132,7 @@ function onOpen() {
     .addItem('Set up forms (run once)', 'setup')
     .addItem('Refresh choice lists', 'refreshChoices')
     .addItem('Update validation (forms + sheet)', 'updateValidation')
+    .addItem('Fix routing numbers (lost leading zeros)', 'fixRoutingNumbers')
     .addItem('Show form links', 'showLinks')
     .addToUi();
 }
@@ -289,6 +290,46 @@ function findSsn_(ss, ssn, cfg) {
     }
   }
   return '';
+}
+
+// Menu: put back the leading zeros Sheets dropped from routing numbers (74908594 -> 074908594).
+// A cell is only changed when the padded number passes the bank routing-number checksum;
+// anything else that is not 9 digits is listed so it can be checked by hand.
+function fixRoutingNumbers() {
+  const ss = SpreadsheetApp.getActive();
+  const fixed = [], check = [];
+  Object.keys(FORMS).forEach(key => {
+    const cfg = FORMS[key];
+    const f = cfg.fields.find(x => x.rule === 'routing');
+    if (!f) return;
+    const sheet = mustGetSheet_(ss, cfg.tab);
+    const col = headerMap_(sheet)[norm_(f.header)] + 1;
+    const last = sheet.getLastRow();
+    if (last < 2) return;
+    sheet.getRange(2, col, last - 1, 1).getDisplayValues().forEach((r, i) => {
+      const raw = String(r[0]).trim();
+      if (!raw || /^[0-9]{9}$/.test(raw)) return;
+      const d = raw.replace(/\D/g, '');
+      const padded = d.length >= 7 && d.length <= 8 ? d.padStart(9, '0') : '';
+      const where = cfg.tab + ' row ' + (i + 2);
+      if (padded && routingChecksumOk_(padded)) {
+        sheet.getRange(i + 2, col).setNumberFormat('@').setValue(padded);
+        fixed.push(where + ': ' + raw + ' -> ' + padded);
+      } else {
+        check.push(where + ': ' + raw);
+      }
+    });
+  });
+  const msg = 'Fixed ' + fixed.length + ':\n' + (fixed.join('\n') || '(none)') +
+    '\n\nCheck by hand ' + check.length + ':\n' + (check.join('\n') || '(none)');
+  Logger.log(msg);
+  try { SpreadsheetApp.getUi().alert('Routing numbers', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) {}
+}
+
+// ABA routing-number checksum: 3*(d1+d4+d7) + 7*(d2+d5+d8) + (d3+d6+d9) is a multiple of 10.
+function routingChecksumOk_(n) {
+  const d = n.split('').map(Number);
+  return (3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + (d[2] + d[5] + d[8])) % 10 === 0;
 }
 
 // Tidy a validated answer before it is written to the sheet.
