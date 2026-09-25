@@ -22,7 +22,8 @@
  *    in "Access Log" (last 4 digits only) and the staff member gets an email saying why.
  *
  *  - State Born In is a dropdown of US states and territories (stored as the 2-letter code),
- *    plus "Born outside the US" (stored as "Outside US").
+ *    plus "Born outside the US" (stored as "Outside US"). Picking that opens a short extra page
+ *    asking "Country of Birth", saved in its own "Country of Birth" column (added automatically).
  *
  * Already set up? After pasting this version, run "Ironclad Forms" -> "Update validation"
  * once (approve the new email permission). It updates the existing forms in place;
@@ -61,6 +62,7 @@ const RULES = {
   ssn: { re: '[0-9]{3}[- ]?[0-9]{2}[- ]?[0-9]{4}', msg: 'SSN: 9 digits, e.g. 123-45-6789.' },
   routing: { re: '[0-9]{9}', msg: 'Routing number: exactly 9 digits (keep leading zeros).' },
   account: { re: '[0-9]{4,17}', msg: 'Account number: 4 to 17 digits, numbers only.' },
+  country: { re: "[A-Za-z][A-Za-z .,'()-]*[A-Za-z.)]", msg: 'Country name, letters only, e.g. Mexico.' },
   heightWeight: { re: '[3-7]([.][0-9]{1,2})?/[0-9]{2,3}', msg: 'Feet.inches/pounds, e.g. 5.9/138 or 5.11/260.' },
 };
 
@@ -81,7 +83,8 @@ const US_STATES = [
   ['MP', 'Northern Mariana Islands'],
 ];
 const OUTSIDE_US = 'Outside US';
-const stateChoices_ = () => US_STATES.map(([c, n]) => n + ' (' + c + ')').concat(['Born outside the US']);
+const BORN_OUTSIDE = 'Born outside the US';
+const stateChoices_ = () => US_STATES.map(([c, n]) => n + ' (' + c + ')').concat([BORN_OUTSIDE]);
 const stateCode_ = v => (String(v).match(/\(([A-Z]{2})\)$/) || [])[1] || OUTSIDE_US;
 
 // Stored as plain text in the sheet so leading zeros are kept.
@@ -96,6 +99,7 @@ const SALES_FIELDS = [
   { header: 'Email', title: 'Email', type: 'text', rule: 'email', help: 'Write N/A if none.' },
   { header: 'Gender', title: 'Gender', type: 'choice', seed: ['Male', 'Female'], fixed: true },
   { header: 'State Born in', title: 'State Born In', type: 'state' },
+  { header: 'Country of Birth', title: 'Country of Birth', type: 'country', rule: 'country', required: true, help: 'Only asked when born outside the US.' },
   { header: 'Date Of Birth', title: 'Date of Birth', type: 'date' },
   { header: 'Coverage', title: 'Coverage', type: 'text', rule: 'coverage', help: 'e.g. 5k' },
   { header: 'Carrier', title: 'Carrier', type: 'choice' },
@@ -127,6 +131,7 @@ const DUPES_FIELDS = [
   { header: 'E-MAIL', title: 'Email', type: 'text', rule: 'email', help: 'Write N/A if none.' },
   { header: 'GENDER', title: 'Gender', type: 'choice', seed: ['Male', 'Female'], fixed: true },
   { header: 'BORN ST', title: 'State Born In', type: 'state' },
+  { header: 'Country of Birth', title: 'Country of Birth', type: 'country', rule: 'country', required: true, help: 'Only asked when born outside the US.' },
   { header: 'DOB', title: 'Date of Birth', type: 'date' },
   { header: 'EXISTING INS', title: 'Existing Insurance', type: 'text' },
   { header: 'HEIGHT/WEIGHT', title: 'Height / Weight', type: 'text', rule: 'heightWeight', help: 'e.g. 5.9/138' },
@@ -170,7 +175,7 @@ function setup() {
   Object.keys(FORMS).forEach(key => {
     const cfg = FORMS[key];
     const sheet = mustGetSheet_(ss, cfg.tab);
-    ensureSubmittedByColumn_(sheet);
+    ensureColumns_(sheet, cfg);
     if (props.getProperty(key + 'FormId')) return; // already built
 
     const form = FormApp.create(cfg.name);
@@ -198,8 +203,9 @@ function setup() {
 
 function buildItems_(form, fields, sheet) {
   const hdr = headerMap_(sheet);
-  fields.forEach(f => {
+  fields.forEach((f, i) => {
     if (hdr[norm_(f.header)] === undefined) throw new Error('Column "' + f.header + '" not found on ' + sheet.getName());
+    if (f.type === 'country') return ensureCountrySection_(form, fields[i - 1], f);
     let item;
     switch (f.type) {
       case 'para': item = form.addParagraphTextItem(); break;
@@ -234,13 +240,17 @@ function updateValidation() {
   Object.keys(FORMS).forEach(key => {
     const id = props.getProperty(key + 'FormId');
     if (!id) return;
+    ensureColumns_(mustGetSheet_(SpreadsheetApp.getActive(), FORMS[key].tab), FORMS[key]);
     const form = FormApp.openById(id).setConfirmationMessage(CONFIRMATION);
     const items = form.getItems(FormApp.ItemType.TEXT);
     FORMS[key].fields.filter(f => f.rule).forEach(f => {
       const it = items.find(i => i.getTitle() === f.title);
       if (it) applyRule_(it.asTextItem().setHelpText(f.help || ''), f);
     });
-    FORMS[key].fields.filter(f => f.type === 'state').forEach(f => makeStateDropdown_(form, f));
+    FORMS[key].fields.forEach((f, i, all) => {
+      if (f.type === 'state') makeStateDropdown_(form, f);
+      if (f.type === 'country') ensureCountrySection_(form, all[i - 1], f);
+    });
   });
   refreshChoices(); // removes "Other" from the fixed lists
   applySheetValidation();
@@ -259,7 +269,30 @@ function makeStateDropdown_(form, f) {
   if (!old) return;
   const index = old.getIndex();
   form.deleteItem(old);
-  form.moveItem(item, index);
+  form.moveItem(item.getIndex(), index);
+}
+
+// Puts "Country of Birth" on its own page right after the state dropdown:
+//   [...questions, State Born In]  [Born outside the US: Country of Birth]  [rest of the form]
+// Picking a state skips straight to the rest; "Born outside the US" goes to the country page.
+function ensureCountrySection_(form, stateField, f) {
+  const state = form.getItems(FormApp.ItemType.LIST).find(i => i.getTitle() === stateField.title).asListItem();
+  if (!form.getItems(FormApp.ItemType.TEXT).some(i => i.getTitle() === f.title)) {
+    const at = state.getIndex();
+    const added = [
+      form.addPageBreakItem().setTitle(BORN_OUTSIDE),
+      form.addTextItem().setTitle(f.title),
+      form.addPageBreakItem().setTitle('More details'),
+    ];
+    added.forEach((it, n) => form.moveItem(it.getIndex(), at + 1 + n));
+  }
+  const country = form.getItems(FormApp.ItemType.TEXT).find(i => i.getTitle() === f.title).asTextItem();
+  const items = form.getItems();
+  const countryPage = items[country.getIndex() - 1].asPageBreakItem();
+  const restPage = items[country.getIndex() + 1].asPageBreakItem();
+  country.setRequired(!!f.required).setHelpText(f.help || '');
+  applyRule_(country, f);
+  state.setChoices(stateChoices_().map(c => state.createChoice(c, c === BORN_OUTSIDE ? countryPage : restPage)));
 }
 
 // Data validation on the sheet columns, so typing straight into the sheet is checked too.
@@ -531,14 +564,20 @@ function ensureLogTab_(ss) {
   }
 }
 
-function ensureSubmittedByColumn_(sheet) {
+// Adds the columns the script itself owns ("Submitted By", "Country of Birth") if missing.
+function ensureColumns_(sheet, cfg) {
+  [SUBMITTED_BY_HEADER].concat(cfg.fields.filter(f => f.type === 'country').map(f => f.header))
+    .forEach(h => ensureColumn_(sheet, h));
+}
+
+function ensureColumn_(sheet, header) {
   const hdr = headerMap_(sheet);
-  if (hdr[norm_(SUBMITTED_BY_HEADER)] !== undefined) return;
+  if (hdr[norm_(header)] !== undefined) return;
   const vals = sheet.getRange(1, 1, 1, sheet.getMaxColumns()).getDisplayValues()[0];
   let lastUsed = 0;
   vals.forEach((v, i) => { if (String(v).trim()) lastUsed = i + 1; });
   if (lastUsed >= sheet.getMaxColumns()) sheet.insertColumnAfter(lastUsed);
-  sheet.getRange(1, lastUsed + 1).setValue(SUBMITTED_BY_HEADER).setFontWeight('bold');
+  sheet.getRange(1, lastUsed + 1).setValue(header).setFontWeight('bold');
 }
 
 function staffEmails_(ss) {
