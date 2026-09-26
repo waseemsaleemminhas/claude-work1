@@ -27,6 +27,27 @@
 
 ---
 
+## ✅ Decision (26 Sep 2026)
+
+**Brand:** Mahastar Medical Billing. **Primary domain:** `mahastarmedicalbilling.llc` (re-checked as unregistered on 26 Sep 2026).
+
+**Register at the same time:**
+| Domain | Purpose |
+|---|---|
+| mahastarmedicalbilling.com | 301 redirect. Catches people who type .com and email mistyped as .com (a HIPAA safeguard). |
+| mahastar.llc | Protects the legal-entity name. Can later host an umbrella brand if you expand beyond billing. |
+| mahastarbilling.com | Short redirect for print, voicemail and business cards. |
+| 1–2 separate domains for cold email (e.g. getmahastarmedicalbilling.com) | Keeps outreach from affecting delivery of your main email domain. |
+
+**Implications to manage:**
+- **Long email addresses:** e.g. `name@mahastarmedicalbilling.llc` (32+ characters). Consider short aliases on mahastarbilling.com for signatures and business cards.
+- **Room to expand:** VAs, scheduling and back office sit outside "Medical Billing". Present them as "practice support services" on the site, and keep mahastar.llc in reserve for a broader brand later.
+- **Premium look:** counter the small-vendor feel of a "Billing" name with a metrics-led site, HIPAA/BAA badges and named leadership (see section 4).
+- **Conflicts:** low-moderate (the "…Star … Billing" field is crowded). Avoid "MahaStar" camel-casing, and run the USPTO searches in section 6 before filing a DBA.
+- **LinkedIn:** page name "Mahastar Medical Billing". Try `/company/mahastar-medical-billing`, then `/company/mahastarmedicalbilling`. Industry: Hospitals and Health Care.
+
+---
+
 ## 1. Name generation (28 candidates)
 
 All names keep the Mahastar core so they tie back to the legal entity. You can file a DBA/assumed name ("Mahastar LLC d/b/a Mahastar RCM").
