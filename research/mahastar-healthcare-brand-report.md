@@ -27,20 +27,29 @@
 
 ---
 
-## ✅ Decision (26 Sep 2026)
+## ✅ Final decision (26 Sep 2026)
 
-**Brand:** Mahastar Medical Billing. **Primary domain:** `mahastarmedicalbilling.llc` (re-checked as unregistered on 26 Sep 2026).
+**Brand:** Mahastar Medical Billing (legal entity: Mahastar LLC, filing a DBA for "Mahastar Medical Billing").
+**Primary domain: `mahastarmedicalbilling.llc`**, used for the website, marketing, LinkedIn and main email. Re-checked as unregistered on 26 Sep 2026.
+
+**Why this domain over the alternatives considered:**
+- **Exact match to the brand.** What people see in the domain is what they remember from the name.
+- **Says "medical" up front.** Doctors know what you do from the domain alone, which is the biggest lever for cold email and outreach.
+- **Lower conflict risk than `mahastarbilling.llc`.** The short version contains "starbilling", which is close to Star Billing Solutions (a Phoenix, AZ medical billing company).
+- **The .llc extension signals the registered company** without needing the taken mahastar.com.
+- **Trade-off accepted:** a long address. Handled with the short-alias domain below.
 
 **Register at the same time:**
 | Domain | Purpose |
 |---|---|
 | mahastarmedicalbilling.com | 301 redirect. Catches people who type .com and email mistyped as .com (a HIPAA safeguard). |
 | mahastar.llc | Protects the legal-entity name. Can later host an umbrella brand if you expand beyond billing. |
+| mahastarbilling.llc | Short alias. Redirects to the main site. Use it for short email aliases on cards, voicemail and signatures. |
 | mahastarbilling.com | Short redirect for print, voicemail and business cards. |
 | 1–2 separate domains for cold email (e.g. getmahastarmedicalbilling.com) | Keeps outreach from affecting delivery of your main email domain. |
 
 **Implications to manage:**
-- **Long email addresses:** e.g. `name@mahastarmedicalbilling.llc` (32+ characters). Consider short aliases on mahastarbilling.com for signatures and business cards.
+- **Long email addresses:** e.g. `name@mahastarmedicalbilling.llc` (32+ characters). Add short aliases (e.g. `name@mahastarbilling.llc`) that deliver to the same inbox.
 - **Room to expand:** VAs, scheduling and back office sit outside "Medical Billing". Present them as "practice support services" on the site, and keep mahastar.llc in reserve for a broader brand later.
 - **Premium look:** counter the small-vendor feel of a "Billing" name with a metrics-led site, HIPAA/BAA badges and named leadership (see section 4).
 - **Conflicts:** low-moderate (the "…Star … Billing" field is crowded). Avoid "MahaStar" camel-casing, and run the USPTO searches in section 6 before filing a DBA.
