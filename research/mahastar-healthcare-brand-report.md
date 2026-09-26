@@ -18,6 +18,8 @@
 
 *\*See the section 3 method notes. Final confirmation happens at registrar checkout.*
 
+**.llc option (see section 3.3):** **mahastar.llc**, an exact match to the legal entity, is unregistered. If you prefer .llc, use mahastar.llc as the primary domain with Mahastar RCM as the public brand, and redirect **mahastarrcm.com** to it.
+
 **Three findings that shaped the ranking:**
 1. **A "Maha…" medical-billing company already exists:** Maha Medical Solutions (Alpharetta, GA) offers medical billing and RCM. That makes **"Mahastar Medical Solutions" the riskiest name** on the list.
 2. **The "-star" billing space is crowded:** MedStar Health (a large health system with registered MEDSTAR marks), MedStar Billing Services, Star Billing Solutions, NorthStar RCM, Medical Billing Star and Stars Pro. Put the weight of the name on the distinctive "Mahastar" and avoid anything that reads as "M-something-Star Health/Billing".
@@ -138,6 +140,42 @@ Commercial WHOIS/RDAP lookup sites were blocked from this research environment. 
 1. Buy **mahastarrcm.com** (primary), **mahastarhealth.com** (future master brand) and **mahastarmedicalbilling.com** (301 redirect or SEO landing page) now. All are unregistered and cheap.
 2. If mahastar.com is yours, use it as the corporate umbrella. If not, a broker enquiry could be worth it later, but it is not needed.
 3. Skip .net/.co/.health for the primary domain. U.S. physicians and practice managers trust and type .com.
+
+### 3.3 Using `.llc` instead of `.com` (added on request)
+
+**Availability.** Checked directly against the .llc registry's authoritative nameservers (`a0/a2/b0/c0.nic.llc`). The known-taken controls `nic.llc`, `google.llc` and `amazon.llc` returned TAKEN, as expected.
+
+| Domain | Length | Status |
+|---|---|---|
+| **mahastar.llc** | 8 | ✅ Unregistered. **This is the exact legal entity name.** |
+| mahastarrcm.llc | 11 | ✅ Unregistered |
+| mahastarhealth.llc | 14 | ✅ Unregistered |
+| mahastarrevenue.llc | 15 | ✅ Unregistered |
+| mahastarpractice.llc / mahastarpracticesolutions.llc | 16 / 25 | ✅ Unregistered |
+| mahastarmedicalbilling.llc / mahastarbilling.llc | 22 / 15 | ✅ Unregistered |
+| mahastarmedical.llc / mahastarhealthcare.llc / mahastarrevenuepartners.llc | — | ✅ Unregistered |
+
+**About .llc:** It is run by Identity Digital and is open to anyone, with no residency or LLC-proof requirement. Typical cost is about $5–12 for the first year and **about $24–35/year to renew**, versus about $10–15 for .com. Registries can flag some names as "premium", so confirm the price at checkout.
+
+**Assessment for a U.S. healthcare B2B brand**
+
+| Factor | `.llc` | `.com` |
+|---|---|---|
+| Brand fit | **mahastar.llc matches the legal entity exactly**, and it is the shortest option available on any extension (mahastar.com is taken). | Needs a longer name (mahastarrcm.com). |
+| Doctor and office-manager familiarity | Low. Many people will type **mahastar.com** by habit, which lands on someone else's online store. | Default expectation. |
+| Email | "@mahastar.llc" looks unusual when read aloud or on a business card, and people may "correct" it to .com. A few older web forms still reject newer extensions. | No friction. |
+| **HIPAA risk** | **Real.** An email meant for you but mistyped as @mahastar.com goes to a domain you don't control. For a billing company, that email could contain patient information (PHI). | n/a |
+| Cold-email deliverability | Workable. The extension matters much less than authentication (SPF, DKIM, DMARC), warm-up and domain age. .llc has no known abuse reputation, but it also carries none of the inherited trust .com has. | Best baseline. |
+| SEO | No ranking penalty. Google treats generic extensions like .llc the same as .com. | Same. |
+| Premium perception | Neutral to slightly "startup/unusual". Few established U.S. RCM firms use non-.com extensions. | Standard for the category. |
+
+**Recommendation if you go with .llc:**
+1. **Primary site and email: `mahastar.llc`.** Show the public brand on it, e.g. "Mahastar RCM: Medical Billing & Revenue Cycle Management". A sub-brand domain like mahastarrcm.llc gives up the one real advantage, an exact match to the legal name.
+2. **Also buy `mahastarrcm.com` and redirect it to mahastar.llc.** It costs about $12/year. It catches people who type .com by habit, and a .com is the safer choice for cold outreach. Send cold email from separate secondary domains (e.g. `getmahastarrcm.com`), never from your main domain.
+3. **Tell people the extension explicitly:** "mahastar**.llc**", and "not .com" on business cards and in email signatures and voicemail. That reduces misdirected email, which matters because of the HIPAA exposure above.
+4. Optionally, send a broker enquiry about **mahastar.com**. It is only parked, and owning it would remove the misdirection risk entirely.
+
+**Net view:** `.llc` is a legitimate choice, and **mahastar.llc is a better .llc than any sub-brand**. For acquiring U.S. physician clients, .com still has lower friction, so run the .llc as your identity with a .com redirect behind it rather than going .llc-only.
 
 ---
 
