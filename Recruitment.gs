@@ -254,6 +254,17 @@ const FIELDS = [
   { key: 'source', header: 'Heard About Us Via', choices: SOURCES, required: true },
 ];
 
+// Answers that are digit strings, not numbers. Sheets parses "03001234567" as the
+// number 3001234567 and the leading zero is gone for good, so these columns are forced
+// to plain text before anything is written to them. Same reasoning as TEXT_RULES in
+// Code.gs for SSN and routing numbers.
+const TEXT_FIELDS = ['phone'];
+
+function textHeaders_() {
+  return FIELDS.filter(function (f) { return TEXT_FIELDS.indexOf(f.key) !== -1; })
+    .map(function (f) { return f.header; });
+}
+
 // Columns this script manages itself, after the form fields.
 const HEAD_ID = 'Applicant ID';
 const HEAD_AT = 'Submitted At';
@@ -279,6 +290,7 @@ function onOpen() {
     .addItem('Set up / repair tabs', 'setup')
     .addItem('Staff access codes', 'showStaffCodes')
     .addItem('Review page link', 'showLink')
+    .addItem('Repair phone numbers', 'fixPhoneNumbers')
     .addSeparator()
     .addItem('Install nightly cleanup', 'installCleanup')
     .addItem('Run cleanup now', 'purgeOldFiles')
@@ -339,6 +351,21 @@ function applyValidation_(sheet) {
   put(HEAD_STATUS, STATUSES);
   put(HEAD_RATING, ['1', '2', '3', '4', '5']);
   FIELDS.forEach(function (f) { if (f.choices) put(f.header, f.choices); });
+
+  textHeaders_().forEach(function (header) {
+    const col = map[norm_(header)];
+    if (col !== undefined) sheet.getRange(1, col + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
+  });
+}
+
+// Force the text columns of one row to plain text. MUST run before the write: once a
+// value has been stored as a number the zero is already lost, and reformatting the cell
+// afterwards just displays the damaged number as text.
+function textFormat_(sheet, map, row) {
+  textHeaders_().forEach(function (header) {
+    const col = map[norm_(header)];
+    if (col !== undefined) sheet.getRange(row, col + 1).setNumberFormat('@');
+  });
 }
 
 function ensureSheet_(ss, name) {
@@ -410,6 +437,7 @@ function doPost(e) {
       row = existing;
       const prev = String(sheet.getRange(row, map[norm_(HEAD_STATUS)] + 1).getDisplayValue());
       const count = Number(sheet.getRange(row, map[norm_(HEAD_COUNT)] + 1).getValue()) || 1;
+      textFormat_(sheet, map, row);
       FIELDS.forEach(function (f) {
         const col = map[norm_(f.header)];
         if (col !== undefined) sheet.getRange(row, col + 1).setValue(prepared.values[norm_(f.header)]);
@@ -436,6 +464,7 @@ function doPost(e) {
       values[map[norm_(HEAD_STATUS)]] = 'New';
       values[map[norm_(HEAD_COUNT)]] = 1;
       row = sheet.getLastRow() + 1;
+      textFormat_(sheet, map, row);
       sheet.getRange(row, 1, 1, width).setValues([values]);
       log_(ss, 'website', id, 'Applied', 'Row ' + row);
     }
@@ -1003,6 +1032,37 @@ function randomCode_() {
   let s = '';
   for (let i = 0; i < 8; i++) s += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
   return s;
+}
+
+// Restore leading zeros on rows written before the columns were forced to text.
+// Safe to run repeatedly: a number that is already 11 digits is left alone.
+function fixPhoneNumbers() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = mustSheet_(ss, APPLICANTS_TAB);
+  const map = headerMap_(sheet);
+  const last = sheet.getLastRow();
+  let fixed = 0, looked = 0;
+
+  textHeaders_().forEach(function (header) {
+    const col = map[norm_(header)];
+    if (col === undefined || last < 2) return;
+    const range = sheet.getRange(2, col + 1, last - 1, 1);
+    const shown = range.getDisplayValues();
+    range.setNumberFormat('@');
+    const out = shown.map(function (r) {
+      const raw = String(r[0] || '').trim();
+      if (!raw) return [''];
+      looked++;
+      const fix = normPhone_(raw);
+      if (fix && fix !== raw) fixed++;
+      return [fix || raw];
+    });
+    range.setValues(out);
+  });
+
+  SpreadsheetApp.getUi().alert(
+    'Checked ' + looked + ' number(s) and repaired ' + fixed + '.\n\n' +
+    'The column is now plain text, so new applications keep their leading zero.');
 }
 
 function showStaffCodes() {
