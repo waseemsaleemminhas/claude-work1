@@ -358,6 +358,17 @@ function applyValidation_(sheet) {
   });
 }
 
+// A sheet has a fixed grid, 1000 rows by default, and getRange throws once you reach
+// past it. setup formats and validates the grid that exists at the time, so the applicant
+// who lands on the first row beyond it would otherwise fail outright - their CV and voice
+// file already saved to Drive, no row written. Grow the grid first; insertRowsAfter carries
+// the formatting and validation of the row above, and textFormat_ sets the text columns on
+// the new row regardless.
+function ensureRow_(sheet, row) {
+  const have = sheet.getMaxRows();
+  if (row > have) sheet.insertRowsAfter(have, row - have);
+}
+
 // Force the text columns of one row to plain text. MUST run before the write: once a
 // value has been stored as a number the zero is already lost, and reformatting the cell
 // afterwards just displays the damaged number as text.
@@ -464,6 +475,7 @@ function doPost(e) {
       values[map[norm_(HEAD_STATUS)]] = 'New';
       values[map[norm_(HEAD_COUNT)]] = 1;
       row = sheet.getLastRow() + 1;
+      ensureRow_(sheet, row);
       textFormat_(sheet, map, row);
       sheet.getRange(row, 1, 1, width).setValues([values]);
       log_(ss, 'website', id, 'Applied', 'Row ' + row);
