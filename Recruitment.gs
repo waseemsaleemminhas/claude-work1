@@ -73,6 +73,125 @@ const MAX_VOICE_MB = 3;
 // "any update?" messages arriving on the company WhatsApp number.
 const ACK_EMAIL = true;
 
+// Mail quota: a consumer Gmail account can send about 100 emails a day, a Workspace
+// account about 1500. Acknowledgements plus status emails stay well inside either
+// unless an ad goes viral; if sending ever fails the write still succeeds.
+
+const INTERVIEWS_TAB = 'Interviews';
+
+// The mock-call scorecard. Each line is scored 1-5 on the review page, so the total
+// is out of 25. Edit the wording freely - `key` is what gets stored, `label` is what
+// the interviewer reads.
+const SCORECARD = [
+  { key: 'english', label: 'Spoken English', hint: 'Word choice, grammar, how neutral the accent is' },
+  { key: 'pace', label: 'Pace and clarity', hint: 'Speed and pauses; easy to follow down a phone line' },
+  { key: 'confidence', label: 'Confidence and tone', hint: 'Warm and steady, does not sound like reading aloud' },
+  { key: 'script', label: 'Script adherence', hint: 'Stays on the opener and hits every required point' },
+  { key: 'objection', label: 'Objection handling', hint: 'Reaction to "not interested" and to being rushed' },
+];
+const RECOMMENDATIONS = ['Strong yes', 'Yes', 'Borderline', 'No'];
+
+// What an applicant is told when their status changes. Remove a status from this
+// object and nothing is sent for it. The reviewer can also untick "email the
+// applicant" on any single change.
+//   {{name}}   first name        {{id}}     reference, e.g. APP-0042
+//   {{role}}   role applied for  {{detail}} the note the reviewer typed, if any
+const STATUS_EMAILS = {
+  'Shortlisted': {
+    subject: 'Your application to Ironclad Tech - shortlisted ({{id}})',
+    body: [
+      'Hello {{name}},',
+      '',
+      'Good news. Your application for {{role}} has been shortlisted and we would like to',
+      'speak with you.',
+      '',
+      '{{detail}}',
+      '',
+      'Please keep your phone available over the next few days. If you need to tell us',
+      'anything about your availability, reply to this email quoting {{id}}.',
+      '',
+      'Regards,',
+      'Recruitment Team',
+      'Ironclad Tech',
+    ].join('\n'),
+  },
+  'Interview Scheduled': {
+    subject: 'Interview confirmed - Ironclad Tech ({{id}})',
+    body: [
+      'Hello {{name}},',
+      '',
+      'Your interview for {{role}} is confirmed.',
+      '',
+      '{{detail}}',
+      '',
+      'What to expect: a short conversation about your experience, then a mock call where',
+      'you read our opener aloud. You do not need to prepare anything or bring documents.',
+      '',
+      'If you cannot make it, reply to this email quoting {{id}} and we will rearrange.',
+      '',
+      'Regards,',
+      'Recruitment Team',
+      'Ironclad Tech',
+    ].join('\n'),
+  },
+  'Rejected': {
+    subject: 'Your application to Ironclad Tech ({{id}})',
+    body: [
+      'Hello {{name}},',
+      '',
+      'Thank you for applying for {{role}} at Ironclad Tech, and for the time you put into',
+      'your application.',
+      '',
+      'On this occasion we are not taking it further. This is not a judgement on your',
+      'ability - we had more strong applicants than seats.',
+      '',
+      '{{detail}}',
+      '',
+      'You are welcome to apply again for a future opening.',
+      '',
+      'We wish you well.',
+      '',
+      'Regards,',
+      'Recruitment Team',
+      'Ironclad Tech',
+    ].join('\n'),
+  },
+  'Talent Pool': {
+    subject: 'Keeping your details on file - Ironclad Tech ({{id}})',
+    body: [
+      'Hello {{name}},',
+      '',
+      'Thank you for applying for {{role}}. We do not have a seat for you right now, but we',
+      'were impressed enough to keep your details on file for the next intake.',
+      '',
+      '{{detail}}',
+      '',
+      'We will contact you directly when something suitable opens. You do not need to',
+      'apply again, though you are welcome to.',
+      '',
+      'Regards,',
+      'Recruitment Team',
+      'Ironclad Tech',
+    ].join('\n'),
+  },
+  'Hired': {
+    subject: 'Welcome to Ironclad Tech ({{id}})',
+    body: [
+      'Hello {{name}},',
+      '',
+      'We are glad to confirm your place with us as {{role}}.',
+      '',
+      '{{detail}}',
+      '',
+      'Please reply to this email to confirm you are joining, quoting {{id}}.',
+      '',
+      'Regards,',
+      'Recruitment Team',
+      'Ironclad Tech',
+    ].join('\n'),
+  },
+};
+
 // Nightly cleanup: trash the CV and voice file of anyone Rejected this long ago.
 // The row stays, so you never re-interview someone by accident.
 const PURGE_REJECTED_AFTER_MONTHS = 12;
@@ -178,6 +297,12 @@ function setup() {
   ensureSheet_(ss, LOG_TAB).getRange(1, 1, 1, 5)
     .setValues([['When', 'Who', 'Applicant ID', 'Action', 'Detail']]).setFontWeight('bold');
 
+  const iv = ensureSheet_(ss, INTERVIEWS_TAB);
+  const ivHead = interviewHeaders_();
+  iv.getRange(1, 1, 1, ivHead.length).setValues([ivHead]).setFontWeight('bold');
+  iv.setFrozenRows(1);
+  iv.getRange(1, 1, 1, ivHead.length).setBackground('#1f2933').setFontColor('#ffffff');
+
   const staff = ensureSheet_(ss, STAFF_TAB);
   staff.getRange(1, 1, 1, 3).setValues([['Name', 'Email', 'Access Code']]).setFontWeight('bold');
   if (staff.getLastRow() < 2) {
@@ -196,7 +321,7 @@ function setup() {
   folder_();
 
   SpreadsheetApp.getUi().alert(
-    'Set up.\n\nTabs ready: ' + APPLICANTS_TAB + ', ' + LOG_TAB + ', ' + STAFF_TAB + ', ' + LISTS_TAB +
+    'Set up.\n\nTabs ready: ' + [APPLICANTS_TAB, INTERVIEWS_TAB, LOG_TAB, STAFF_TAB, LISTS_TAB].join(', ') +
     '\nDrive folder: ' + FOLDER_NAME +
     '\n\nNext: Deploy -> New deployment -> Web app -> Execute as Me, Who has access ANYONE. ' +
     'Then paste the /exec URL into apply.html on the website.');
@@ -530,6 +655,145 @@ function ack_(id, v) {
   } catch (err) { /* as above */ }
 }
 
+function interviewHeaders_() {
+  return ['When', 'Applicant ID', 'Name', 'Role', 'Interviewer']
+    .concat(SCORECARD.map(function (c) { return c.label; }))
+    .concat(['Total (25)', 'Recommendation', 'Notes']);
+}
+
+// Read an applicant row into the handful of fields the emails and scorecard need.
+function applicantAt_(sheet, map, row) {
+  const get = function (header) {
+    const c = map[norm_(header)];
+    return c === undefined ? '' : String(sheet.getRange(row, c + 1).getDisplayValue());
+  };
+  return {
+    id: get(HEAD_ID),
+    name: get('Full Name'),
+    email: get('Email'),
+    role: get('Role'),
+    status: get(HEAD_STATUS),
+  };
+}
+
+function fill_(text, v, detail) {
+  return String(text)
+    .replace(/\{\{name\}\}/g, String(v.name || '').split(' ')[0] || 'there')
+    .replace(/\{\{id\}\}/g, v.id || '')
+    .replace(/\{\{role\}\}/g, v.role || 'the role you applied for')
+    .replace(/\{\{detail\}\}/g, String(detail || '').trim())
+    .replace(/\n{3,}/g, '\n\n');          // tidy the gap when {{detail}} is empty
+}
+
+// Tell the applicant their status changed. Returns a line for the log, or ''.
+function statusEmail_(v, status, detail) {
+  const tpl = STATUS_EMAILS[status];
+  if (!tpl) return '';
+  if (!v.email) return 'no email on file, nothing sent';
+  try {
+    MailApp.sendEmail({
+      to: v.email,
+      subject: fill_(tpl.subject, v, detail),
+      body: fill_(tpl.body, v, detail),
+      name: 'Ironclad Tech Recruitment',
+      replyTo: CAREERS_EMAIL,
+    });
+    return 'emailed the applicant';
+  } catch (err) {
+    return 'EMAIL FAILED: ' + (err && err.message ? err.message : err);
+  }
+}
+
+// Save a mock-call scorecard. One row per interview, so a second interview does not
+// overwrite the first; the applicant's Rating is refreshed from the latest total.
+function webInterview(req) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const staff = findStaff_(ss, req && req.code);
+    if (!staff) return { ok: false, needCode: true, message: 'Your access code was not recognised.' };
+
+    const sheet = mustSheet_(ss, APPLICANTS_TAB);
+    const map = headerMap_(sheet);
+    const row = Number(req && req.row);
+    if (!(row > 1) || row > sheet.getLastRow()) {
+      return { ok: false, message: 'That applicant could not be opened. Refresh the list.' };
+    }
+    const who = applicantAt_(sheet, map, row);
+    if (!who.id || (req.id && who.id !== req.id)) {
+      return { ok: false, message: 'The list has moved on. Refresh and try again.' };
+    }
+
+    const scores = (req && req.scores) || {};
+    const values = [];
+    let total = 0;
+    for (let i = 0; i < SCORECARD.length; i++) {
+      const raw = Number(scores[SCORECARD[i].key]);
+      if (!(raw >= 1 && raw <= 5)) {
+        return { ok: false, message: 'Score every line from 1 to 5 before saving.' };
+      }
+      values.push(raw);
+      total += raw;
+    }
+
+    const rec = String((req && req.recommendation) || '');
+    if (RECOMMENDATIONS.indexOf(rec) === -1) {
+      return { ok: false, message: 'Choose a recommendation.' };
+    }
+
+    const iv = mustSheet_(ss, INTERVIEWS_TAB);
+    iv.appendRow([new Date(), who.id, who.name, who.role, staff.email]
+      .concat(values)
+      .concat([total, rec, String((req && req.notes) || '').slice(0, 2000)]));
+
+    // Rating is 1-5 on the applicant row; the scorecard is out of 25.
+    const ratingCol = map[norm_(HEAD_RATING)];
+    if (ratingCol !== undefined) sheet.getRange(row, ratingCol + 1).setValue(Math.round(total / 5));
+    sheet.getRange(row, map[norm_(HEAD_UPD)] + 1).setValue(new Date());
+    sheet.getRange(row, map[norm_(HEAD_BY)] + 1).setValue(staff.email);
+
+    let moved = '';
+    if (req && req.markInterviewed && who.status !== 'Interviewed') {
+      sheet.getRange(row, map[norm_(HEAD_STATUS)] + 1).setValue('Interviewed');
+      moved = ' Status set to Interviewed.';
+    }
+
+    log_(ss, staff.email, who.id, 'Interview', total + '/25, ' + rec);
+    return {
+      ok: true,
+      total: total,
+      rating: Math.round(total / 5),
+      recommendation: rec,
+      message: 'Scorecard saved: ' + total + '/25, ' + rec + '.' + moved,
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Most recent interview per applicant, so the list can show it without opening each one.
+function lastInterviews_(ss) {
+  const sheet = ss.getSheetByName(INTERVIEWS_TAB);
+  const out = {};
+  if (!sheet || sheet.getLastRow() < 2) return out;
+  const map = headerMap_(sheet);
+  const cId = map[norm_('Applicant ID')];
+  const cTotal = map[norm_('Total (25)')];
+  const cRec = map[norm_('Recommendation')];
+  if (cId === undefined) return out;
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getDisplayValues()
+    .forEach(function (r) {
+      const id = String(r[cId] || '');
+      if (!id) return;
+      out[id] = {                                  // later rows overwrite earlier ones
+        total: cTotal === undefined ? '' : r[cTotal],
+        rec: cRec === undefined ? '' : r[cRec],
+      };
+    });
+  return out;
+}
+
 function log_(ss, who, id, action, detail) {
   try {
     mustSheet_(ss, LOG_TAB).appendRow([new Date(), who || '', id || '', action || '', detail || '']);
@@ -558,6 +822,8 @@ function webBoot(code) {
     ok: true,
     staff: { name: staff.name, email: staff.email },
     statuses: STATUSES, roles: ROLES, open: OPEN_STATUSES,
+    scorecard: SCORECARD, recommendations: RECOMMENDATIONS,
+    emailStatuses: Object.keys(STATUS_EMAILS),
   };
 }
 
@@ -576,6 +842,7 @@ function webApplicants(req) {
   const search = norm_((req && req.q) || '');
 
   const data = sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getDisplayValues();
+  const interviews = lastInterviews_(ss);
   const rows = [];
   for (let i = data.length - 1; i >= 0; i--) {       // newest first
     const d = data[i];
@@ -611,6 +878,7 @@ function webApplicants(req) {
       cv: get(HEAD_CV),
       voice: get(HEAD_VOICE),
       times: get(HEAD_COUNT),
+      interview: interviews[get(HEAD_ID)] || null,
       fields: fields,
     });
     if (rows.length >= 300) break;
@@ -648,6 +916,8 @@ function webUpdate(req) {
       changes.push(header + ': ' + (before || '(blank)') + ' -> ' + (after || '(blank)'));
     };
 
+    const was = String(sheet.getRange(row, map[norm_(HEAD_STATUS)] + 1).getDisplayValue());
+
     if (req.status !== undefined) {
       if (STATUSES.indexOf(String(req.status)) === -1) return { ok: false, message: 'Unknown status.' };
       set(HEAD_STATUS, req.status);
@@ -659,8 +929,21 @@ function webUpdate(req) {
 
     set(HEAD_BY, staff.email);
     sheet.getRange(row, map[norm_(HEAD_UPD)] + 1).setValue(new Date());
-    log_(ss, staff.email, id, 'Updated', changes.join(' | '));
-    return { ok: true, message: 'Saved.' };
+
+    // The row is written before the email goes out: a mail failure must never cost us
+    // the status change, and the reviewer is told either way.
+    let mailed = '';
+    const now = String(req.status === undefined ? was : req.status);
+    if (now !== was && req.notify && STATUS_EMAILS[now]) {
+      mailed = statusEmail_(applicantAt_(sheet, map, row), now, req.detail);
+    }
+
+    log_(ss, staff.email, id, 'Updated', changes.join(' | ') + (mailed ? ' | ' + mailed : ''));
+    return {
+      ok: true,
+      message: 'Saved.' + (mailed === 'emailed the applicant' ? ' The applicant has been emailed.'
+             : mailed ? ' But: ' + mailed + '.' : ''),
+    };
   } finally {
     lock.releaseLock();
   }
@@ -867,13 +1150,30 @@ function css_() {
     '.edit{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}',
     '.edit label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;font-weight:600;display:block;margin-bottom:4px}',
     '.edit .wide{grid-column:1/-1}',
-    '@media(max-width:600px){.head .sp{margin-left:0;width:100%}}',
+    '.pill.score{background:#e8eefc;color:#1f3a93;font-variant-numeric:tabular-nums}',
+    '.mail-row{background:#fff8e4;border:1px solid #f0dca0;border-radius:8px;padding:10px 12px}',
+    'label.inline{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--steel);text-transform:none;letter-spacing:0;margin:0 0 8px;cursor:pointer}',
+    'label.inline input{width:16px;height:16px;flex:0 0 auto;accent-color:var(--gold)}',
+    '.scorecard{margin-top:14px;border:1px solid var(--line);border-radius:8px;background:#fff}',
+    '.scorecard summary{padding:10px 13px;cursor:pointer;font-weight:600;font-size:14px;list-style:none}',
+    '.scorecard summary::-webkit-details-marker{display:none}',
+    '.scorecard summary:before{content:"\\25B8 ";color:#6b7280}',
+    '.scorecard[open] summary:before{content:"\\25BE "}',
+    '.scorecard summary:hover{background:#fbfbfc}',
+    '.sc-body{padding:4px 13px 14px;border-top:1px solid var(--line)}',
+    '.sc-line{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px dashed #eef1f4}',
+    '.sc-line:last-of-type{border-bottom:0}',
+    '.sc-line label{flex:1;font-size:13px;font-weight:600;margin:0}',
+    '.sc-line label small{display:block;font-weight:400;color:#6b7280;font-size:11.5px;margin-top:2px}',
+    '.sc-line select{width:auto;min-width:92px;flex:0 0 auto}',
+    '.sc-body textarea{margin:10px 0}',
+    '@media(max-width:600px){.head .sp{margin-left:0;width:100%}.sc-line{flex-direction:column;align-items:stretch;gap:6px}.sc-line select{width:100%}}',
   ].join('\n');
 }
 
 function clientJs_() {
   return [
-    'var CODE="",OPEN=[],STATUSES=[],ROLES=[],ROWS=[];',
+    'var CODE="",OPEN=[],STATUSES=[],ROLES=[],ROWS=[],SCORECARD=[],RECS=[],MAILED=[];',
     'function el(id){return document.getElementById(id)}',
     'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}',
     'function say(id,t,cls){var n=el(id);n.textContent=t||"";n.className="msg"+(cls?" "+cls:"")}',
@@ -884,6 +1184,7 @@ function clientJs_() {
     '    b.disabled=false;',
     '    if(!r||!r.ok){say("gateMsg",(r&&r.message)||"Not recognised.","bad");return}',
     '    CODE=code||"";OPEN=r.open;STATUSES=r.statuses;ROLES=r.roles;',
+    '    SCORECARD=r.scorecard||[];RECS=r.recommendations||[];MAILED=r.emailStatuses||[];',
     '    el("who").textContent=r.staff.name?r.staff.name+" ("+r.staff.email+")":r.staff.email;',
     '    el("gate").hidden=true;el("app").hidden=false;',
     '    fill();load();',
@@ -917,6 +1218,12 @@ function clientJs_() {
     '  Array.prototype.forEach.call(document.querySelectorAll("[data-save]"),function(b){',
     '    b.addEventListener("click",function(){save(b.getAttribute("data-save"))});',
     '  });',
+    '  Array.prototype.forEach.call(document.querySelectorAll("[data-interview]"),function(b){',
+    '    b.addEventListener("click",function(){saveInterview(b.getAttribute("data-interview"))});',
+    '  });',
+    '  Array.prototype.forEach.call(document.querySelectorAll("[data-f=\\"status\\"]"),function(sel){',
+    '    sel.addEventListener("change",function(){mailHint(sel)});mailHint(sel);',
+    '  });',
     '}',
 
     'function card(a,i){',
@@ -932,17 +1239,76 @@ function clientJs_() {
     '    \'<div class="head"><span class="nm">\'+esc(a.name||"(no name)")+\'</span>\'+',
     '      \'<span class="id">\'+esc(a.id)+(Number(a.times)>1?" · applied "+esc(a.times)+"x":"")+\'</span>\'+',
     '      \'<span class="muted">\'+esc(a.role)+" · "+esc(a.city)+\'</span>\'+',
-    '      \'<span class="sp"></span><span class="pill \'+esc(String(a.status).replace(/[^A-Za-z-]/g,""))+\'">\'+esc(a.status)+\'</span></div>\'+',
+    '      \'<span class="sp"></span><span class="pill \'+esc(String(a.status).replace(/[^A-Za-z-]/g,""))+\'">\'+esc(a.status)+\'</span>\'+',
+    '      (a.interview?\'<span class="pill score">\'+esc(a.interview.total)+\'/25</span>\':"")+\'</div>\'+',
     '    \'<div class="body"><div class="grid">\'+det+\'</div><div class="links">\'+links+\'</div>\'+',
     '      \'<div class="edit">\'+',
     '        \'<div><label>Status</label><select data-f="status">\'+opts+\'</select></div>\'+',
     '        \'<div><label>Rating</label><select data-f="rating">\'+rat+\'</select></div>\'+',
-    '        \'<div class="wide"><label>Notes</label><textarea data-f="notes">\'+esc(a.notes)+\'</textarea></div>\'+',
+    '        \'<div class="wide"><label>Notes (internal, never sent)</label><textarea data-f="notes">\'+esc(a.notes)+\'</textarea></div>\'+',
+    '        \'<div class="wide mail-row" data-mailrow hidden>\'+',
+    '          \'<label class="inline"><input type="checkbox" data-f2="notify" checked> Email the applicant about this change</label>\'+',
+    '          \'<input type="text" data-f="detail" placeholder="Goes into that email - date, time, address, or a line of your own">\'+',
+    '        \'</div>\'+',
     '        \'<div><button type="button" data-save="\'+i+\'">Save</button></div>\'+',
     '        \'<div class="msg" data-msg></div>\'+',
     '      \'</div>\'+',
+    '      card2(a,i)+',
     '      (a.by?\'<p class="muted">Last changed by \'+esc(a.by)+"</p>":"")+',
     '    \'</div></div>\';',
+    '}',
+
+    'function card2(a,i){',
+    '  if(!SCORECARD.length) return "";',
+    '  var prev=a.interview?\' <span class="pill score">last: \'+esc(a.interview.total)+\'/25, \'+esc(a.interview.rec)+\'</span>\':"";',
+    '  var nums=[1,2,3,4,5].map(function(n){return "<option>"+n+"</option>"}).join("");',
+    '  var lines=SCORECARD.map(function(c){',
+    '    return \'<div class="sc-line"><label>\'+esc(c.label)+\'<small>\'+esc(c.hint)+\'</small></label>\'+',
+    '           \'<select data-sc="\'+esc(c.key)+\'"><option value="">-</option>\'+nums+\'</select></div>\';',
+    '  }).join("");',
+    '  var recs=RECS.map(function(r){return "<option>"+esc(r)+"</option>"}).join("");',
+    '  return \'<details class="scorecard"><summary>Mock-call scorecard\'+prev+\'</summary><div class="sc-body">\'+lines+',
+    '    \'<div class="sc-line"><label>Recommendation</label><select data-sc-rec><option value="">-</option>\'+recs+\'</select></div>\'+',
+    '    \'<textarea data-sc-notes placeholder="What stood out, good or bad"></textarea>\'+',
+    '    \'<label class="inline"><input type="checkbox" data-sc-mark checked> Also set status to Interviewed</label>\'+',
+    '    \'<div><button type="button" data-interview="\'+i+\'">Save scorecard</button> <span class="msg" data-sc-msg></span></div>\'+',
+    '  \'</div></details>\';',
+    '}',
+
+    // The "email the applicant" row only appears for a status that has a template.
+    'function mailHint(sel){',
+    '  var root=sel.closest(".row"); if(!root) return;',
+    '  var row=root.querySelector("[data-mailrow]"); if(!row) return;',
+    '  row.hidden = MAILED.indexOf(sel.value)===-1;',
+    '}',
+
+    'function saveInterview(i){',
+    '  var a=ROWS[i];',
+    '  var root=document.querySelector(\'.row[data-i="\'+i+\'"]\');',
+    '  var btn=root.querySelector("[data-interview]"),msg=root.querySelector("[data-sc-msg]");',
+    '  var scores={},missing=0;',
+    '  Array.prototype.forEach.call(root.querySelectorAll("[data-sc]"),function(sel){',
+    '    if(!sel.value) missing++;',
+    '    scores[sel.getAttribute("data-sc")]=sel.value;',
+    '  });',
+    '  var rec=root.querySelector("[data-sc-rec]").value;',
+    '  if(missing||!rec){msg.textContent="Score every line and choose a recommendation.";msg.className="msg bad";return}',
+    '  var mark=root.querySelector("[data-sc-mark]").checked;',
+    '  btn.disabled=true;msg.textContent="Saving...";msg.className="msg";',
+    '  google.script.run.withSuccessHandler(function(r){',
+    '    btn.disabled=false;',
+    '    if(!r||!r.ok){msg.textContent=(r&&r.message)||"Not saved.";msg.className="msg bad";return}',
+    '    msg.textContent=r.message;msg.className="msg ok";',
+    '    a.interview={total:r.total,rec:r.recommendation};',
+    '    var rating=root.querySelector(\'[data-f="rating"]\'); if(rating) rating.value=String(r.rating);',
+    '    if(mark){',
+    '      var st=root.querySelector(\'[data-f="status"]\'); if(st){st.value="Interviewed";mailHint(st)}',
+    '      var pill=root.querySelector(".pill"); pill.textContent="Interviewed"; pill.className="pill Interviewed";',
+    '      a.status="Interviewed";',
+    '    }',
+    '  }).withFailureHandler(function(e){btn.disabled=false;msg.textContent=(e&&e.message)||"Not saved.";msg.className="msg bad"})',
+    '   .webInterview({code:CODE,row:a.row,id:a.id,scores:scores,recommendation:rec,',
+    '                  notes:root.querySelector("[data-sc-notes]").value,markInterviewed:mark});',
     '}',
 
     'function save(i){',
@@ -959,7 +1325,8 @@ function clientJs_() {
     '    var pill=root.querySelector(".pill");pill.textContent=a.status;',
     '    pill.className="pill "+a.status.replace(/[^A-Za-z-]/g,"");',
     '  }).withFailureHandler(function(e){btn.disabled=false;msg.textContent=(e&&e.message)||"Not saved.";msg.className="msg bad"})',
-    '   .webUpdate({code:CODE,row:a.row,id:a.id,status:get("status"),rating:get("rating"),notes:get("notes")});',
+    '   .webUpdate({code:CODE,row:a.row,id:a.id,status:get("status"),rating:get("rating"),notes:get("notes"),',
+    '                notify:!!(root.querySelector(\'[data-f2="notify"]\')||{}).checked,detail:get("detail")});',
     '}',
 
     'el("go").addEventListener("click",function(){boot(el("code").value.trim().toUpperCase())});',
