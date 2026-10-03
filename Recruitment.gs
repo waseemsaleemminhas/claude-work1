@@ -69,6 +69,12 @@ const ID_PAD = 4;
 const MAX_CV_MB = 5;
 const MAX_VOICE_MB = 3;
 
+// Refuse an application that arrives with no voice sample. The form enforces this
+// too, but the endpoint is public, so a direct POST would otherwise land an
+// applicant with nothing to judge spoken English on. Set to false to go back to
+// accepting applications without one.
+const REQUIRE_VOICE = true;
+
 // Email the applicant a "we got it" the moment they submit. This is what stops the
 // "any update?" messages arriving on the company WhatsApp number.
 const ACK_EMAIL = true;
@@ -421,6 +427,16 @@ function doPost(e) {
 
     const spam = turnstileFailure_(p['cf-turnstile-response']);
     if (spam) return jsonOut_({ ok: false, message: spam });
+
+    // Checked here rather than pushed onto prepare_'s errors list: apply.html shows
+    // result.message and ignores the errors array, so a field error would tell the
+    // applicant to check a field marked below while marking nothing.
+    if (REQUIRE_VOICE && !String(p.voice_data || '').trim()) {
+      return jsonOut_({
+        ok: false,
+        message: 'A voice sample is required. Please record one on the form, or upload an audio file, then submit again.',
+      });
+    }
 
     const prepared = prepare_(p);
     if (prepared.errors.length) {
