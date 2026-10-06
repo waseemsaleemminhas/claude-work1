@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" role="img" aria-label="Ironclad Tech">
+  <title>Ironclad Tech</title>
+  <defs>
+    <linearGradient id="icChrome" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6E6B66"/><stop offset=".18" stop-color="#DEDEDC"/>
+      <stop offset=".38" stop-color="#8A8783"/><stop offset=".58" stop-color="#F2F2F0"/>
+      <stop offset=".78" stop-color="#7C7974"/><stop offset="1" stop-color="#4E4C48"/>
+    </linearGradient>
+    <linearGradient id="icField" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#32322F"/><stop offset="1" stop-color="#121110"/>
+    </linearGradient>
+    <linearGradient id="icGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7A6228"/><stop offset=".34" stop-color="#C9A43F"/>
+      <stop offset=".52" stop-color="#F6EBB4"/><stop offset=".63" stop-color="#D9B85C"/>
+      <stop offset="1" stop-color="#6B5120"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 14 H110 A4 4 0 0 1 114 18 V66 C114 100 94 124 60 136 C26 124 6 100 6 66 V18 A4 4 0 0 1 10 14 Z" fill="url(#icChrome)"/>
+  <path d="M18 23 H102 A2 2 0 0 1 104 25 V66 C104 93 88 113 60 123 C32 113 16 93 16 66 V25 A2 2 0 0 1 18 23 Z" fill="url(#icField)"/>
+  <path d="M27 34 H53 V46 H45 V84 H51 V95 H29 V84 H35 V46 H27 Z" fill="url(#icGold)"/>
+  <path d="M57 34 H93 V46 H81 V104 H69 V46 H57 Z" fill="url(#icGold)"/>
+</svg>

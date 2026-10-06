@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" role="img" aria-label="Ironclad Tech" fill="currentColor">
+  <title>Ironclad Tech</title>
+  <path fill-rule="evenodd" d="M10 14 H110 A4 4 0 0 1 114 18 V66 C114 100 94 124 60 136 C26 124 6 100 6 66 V18 A4 4 0 0 1 10 14 Z M20 25 H100 V66 C100 91 86 109 60 118 C34 109 20 91 20 66 Z"/>
+  <path d="M27 34 H53 V46 H45 V84 H51 V95 H29 V84 H35 V46 H27 Z"/><path d="M57 34 H93 V46 H81 V104 H69 V46 H57 Z"/>
+</svg>
