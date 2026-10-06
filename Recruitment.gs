@@ -59,6 +59,9 @@ const LISTS_TAB = 'Lists';
 
 const FOLDER_NAME = 'Ironclad Tech — Applications';
 const CAREERS_EMAIL = 'careers@getironcladtech.com';
+// Internal notifications go here, not to CAREERS_EMAIL. It must be a mailbox
+// other than the Google account that owns this script - see notifyTo_().
+const NOTIFY_EMAIL = 'waseem.development@gmail.com';
 const APP_TITLE = 'Ironclad Tech — Applicant Review';
 const SITE_URL = 'https://www.getironcladtech.com';
 
@@ -727,29 +730,34 @@ function ack_(id, v) {
 /**
  * Where internal notifications actually go.
  *
- * CAREERS_EMAIL stays the public, branded address - it is what applicants see
- * and reply to. But this domain's MX is Cloudflare Email Routing, which
- * forwards only the addresses it has a rule for and drops the rest, and
- * MailApp reports success the moment Google accepts a message. So a missing
- * rule loses every notification with nothing to show for it.
+ * Not CAREERS_EMAIL. That address forwards through Cloudflare Email Routing
+ * back to the same Google account the script sends from, and the forward keeps
+ * the original Message-ID, so Gmail treats the arriving copy as a duplicate of
+ * the one already in Sent and never shows it. The mail is not lost - it is
+ * deduplicated, which looks identical from here because MailApp reports
+ * success either way.
  *
- * The script owner's own Google mailbox is always deliverable, so it gets a
- * copy too. Set a CAREERS_NOTIFY script property to send somewhere else
- * instead of CAREERS_EMAIL, without editing this file.
+ * So notifications go to a mailbox that is not the sender. CAREERS_EMAIL stays
+ * the public, branded address: it is still the replyTo on applicant mail and
+ * still what applicants are told to write to.
+ *
+ * A CAREERS_NOTIFY script property overrides NOTIFY_EMAIL without editing this
+ * file. Whatever you set it to, keep it different from the account that owns
+ * the script, or the dedupe comes straight back.
  */
 function notifyTo_() {
-  const out = [];
-  let primary = CAREERS_EMAIL;
   try {
     const override = PropertiesService.getScriptProperties().getProperty('CAREERS_NOTIFY');
-    if (override && override.trim()) primary = override.trim();
-  } catch (err) { /* fall back to the constant */ }
-  out.push(primary);
+    if (override && override.trim()) return override.trim();
+  } catch (err) { /* fall through to the constant */ }
+  if (NOTIFY_EMAIL && NOTIFY_EMAIL.trim()) return NOTIFY_EMAIL.trim();
+  // Nothing configured. The owner's own mailbox is at least deliverable, even
+  // though it is the sender and so may be deduplicated.
   try {
     const owner = Session.getEffectiveUser().getEmail();
-    if (owner && out.indexOf(owner) === -1) out.push(owner);
-  } catch (err) { /* owner address not available - primary alone will do */ }
-  return out.join(',');
+    if (owner) return owner;
+  } catch (err) { /* ignore */ }
+  return CAREERS_EMAIL;
 }
 
 function mailLog_(id, action, to, detail) {
@@ -790,8 +798,9 @@ function checkEmailDelivery() {
     MailApp.sendEmail(notifyTo_(), 'Ironclad Tech — email delivery check',
       'This is a test sent from the recruitment script at ' + stamp + '.\n\n' +
       'It went to: ' + notifyTo_() + '\n' +
-      'If it never arrives, Google accepted the message and something after Google dropped it - ' +
-      'for this domain, check that Cloudflare Email Routing has a rule for ' + CAREERS_EMAIL + '.\n\n' +
+      'If it never arrives, Google accepted the message and something after Google dropped it. ' +
+      'Check that this address is not the account that owns the script, and not a ' +
+      'Cloudflare route back to it - Gmail hides a forwarded copy of a message it already sent.\n\n' +
       'Quota remaining when sent: ' + quota);
     mailLog_('', 'Delivery check sent', notifyTo_(), stamp);
     ui.alert('Email check',
