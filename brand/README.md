@@ -4,15 +4,16 @@ Vector rebuild of the Ironclad Tech logo, drawn from the 400×400 PNG supplied
 on 6 October 2026. The PNG was the only source: there is no AI/EPS/layered
 original, and 400px is its ceiling.
 
-**Nothing here is on the live site yet.** It is waiting on a decision between
-variant A and variant B — see "Open questions" at the bottom.
+**Variant B is now on the website**, on branch `claude/kind-wozniak-tzxz0m` of
+`waseemsaleemminhas/ironclad-tech-website` — not yet merged to `main`.
 
 ## Why this exists
 
-`getironcladtech.com` does not currently show the Ironclad logo. The header
-(`<a class="brand">`) and every favicon size render a generic shield-with-a-
-person icon that was dropped in to ship the site. The supplied artwork appears
-nowhere.
+`getironcladtech.com` did not show the Ironclad logo at all. The header
+(`<a class="brand">`), the footer, the page loader and every favicon size
+rendered a generic shield-with-a-person icon that was dropped in to ship the
+site. `images/logo/*.png` and `images/brand/*.svg` were the same placeholder,
+and the share image embedded it too.
 
 ## Files
 
@@ -86,23 +87,43 @@ mark.
 Total 2.36s. For an alpha export set `--stage: transparent` on `:root` and
 record with an alpha-capable codec (WebM/VP9 or ProRes 4444).
 
-## Still missing
+## Rendered video
 
-Not yet produced, pending the A/B decision:
+`video/` holds the intro rendered from `intro.html` at 1920×1080, 30fps, 3.0s
+(2.4s of motion plus a 0.6s hold on the finished mark):
 
-- PNG exports at 1×/2×/3×
-- `favicon.ico`, `apple-touch-icon.png`, 192/512 PWA icons (the current ones
-  are the placeholder icon)
-- 1200×630 OG share image (`/images/og-image.jpg` is currently a photo)
-- Horizontal and stacked lock-ups as standalone files
-- The rendered WebM intro
+| File | Codec | Use |
+|---|---|---|
+| `ironclad-intro-alpha.webm` | VP9, `yuva420p` | Web, and most NLEs |
+| `ironclad-intro-alpha.mov` | ProRes 4444, 16-bit alpha | After Effects, Premiere, Resolve |
+| `ironclad-intro-navy.mp4` | H.264 on `#07162A` | Anything that cannot take alpha |
 
-## Open questions
+Frames are produced by freezing the CSS timeline: each animation keeps its
+easing and duration, its delay is shifted by −t, and `animation-play-state`
+is paused, so the browser renders exactly the state the live animation holds
+at time t. Re-render with `scratchpad/frames.py` + `render_video.sh`.
 
-1. **A or B for the website?** Recommendation: B everywhere on the site, A kept
-   for print, video and anything above 120px. A normal two-cut system.
-2. **Is the I/T gap acceptable?** See above — it departs from the original.
-3. **Push to the site, or hand over files?**
-4. **Who draws the video?** The WebM export can come from `intro.html`. Real
-   metal shading and depth is After Effects work; the timing sheet above is the
-   spec for whoever does it.
+These are flat-cut renders. Real metal shading and depth is After Effects
+work — the timing sheet above is the spec for whoever does it.
+
+## What shipped to the website
+
+On branch `claude/kind-wozniak-tzxz0m` of `ironclad-tech-website`:
+
+- The inline mark in the header, footer and page loader across 25 pages
+  (75 instances), at the same `viewBox` and the same `30×35` / `26×30`
+  attributes, so nothing moved
+- `favicon/favicon.svg` and every favicon PNG, plus `apple-touch-icon.png`
+- `images/brand/*.svg` (5 rewritten, 1 added)
+- `images/logo/*.png`, including the one the JSON-LD organisation logo points at
+- `images/og-image.jpg`, rebuilt on `#07162A` instead of its old brighter blue
+
+Still not produced: a `favicon.ico` (the site links PNGs only, so nothing
+needs it), and stacked/horizontal lock-ups as standalone SVG files — the site
+composes the lock-up from the mark plus live text, which is the better form.
+
+## Open question still outstanding
+
+**Is the I/T gap acceptable?** It departs from the original artwork, which runs
+the two top bars together. Everything shipped above uses the gapped version.
+Changing it later is a one-line path edit in each file, not a redraw.
