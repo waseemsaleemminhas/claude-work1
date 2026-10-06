@@ -509,7 +509,7 @@ function doPost(e) {
     });
   } catch (err) {
     try {
-      MailApp.sendEmail(CAREERS_EMAIL, 'Application form error — Ironclad Tech',
+      MailApp.sendEmail(notifyTo_(), 'Application form error — Ironclad Tech',
         'An application could not be saved.\n\n' + (err && err.stack ? err.stack : err));
     } catch (ignore) { /* nothing more we can do */ }
     return jsonOut_({ ok: false, message: 'Something went wrong saving your application. Please email ' + CAREERS_EMAIL + '.' });
@@ -670,14 +670,14 @@ function notify_(id, v, subjectKind, cv, voice) {
   lines.push('');
   lines.push('Review page: ' + webUrl_());
   try {
-    MailApp.sendEmail(CAREERS_EMAIL,
+    MailApp.sendEmail(notifyTo_(),
       subjectKind + ': ' + (v[norm_('Full Name')] || 'Applicant') + ' — ' + (v[norm_('Role')] || '') + ' (' + id + ')',
       lines.join('\n'));
-    mailLog_(id, 'Notified', CAREERS_EMAIL, '');
+    mailLog_(id, 'Notified', notifyTo_(), '');
   } catch (err) {
     // Still must not fail the application - the row is already written - but a
     // notification that vanishes silently is how an applicant goes unnoticed.
-    mailLog_(id, 'Notify FAILED', CAREERS_EMAIL, err && err.message ? err.message : String(err));
+    mailLog_(id, 'Notify FAILED', notifyTo_(), err && err.message ? err.message : String(err));
   }
 }
 
@@ -724,6 +724,34 @@ function ack_(id, v) {
 // MailApp swallows nothing here: every send attempt lands in the log tab with
 // the remaining daily quota, so a dropped notification is visible in the sheet
 // rather than being discovered when an applicant asks why nobody called.
+/**
+ * Where internal notifications actually go.
+ *
+ * CAREERS_EMAIL stays the public, branded address - it is what applicants see
+ * and reply to. But this domain's MX is Cloudflare Email Routing, which
+ * forwards only the addresses it has a rule for and drops the rest, and
+ * MailApp reports success the moment Google accepts a message. So a missing
+ * rule loses every notification with nothing to show for it.
+ *
+ * The script owner's own Google mailbox is always deliverable, so it gets a
+ * copy too. Set a CAREERS_NOTIFY script property to send somewhere else
+ * instead of CAREERS_EMAIL, without editing this file.
+ */
+function notifyTo_() {
+  const out = [];
+  let primary = CAREERS_EMAIL;
+  try {
+    const override = PropertiesService.getScriptProperties().getProperty('CAREERS_NOTIFY');
+    if (override && override.trim()) primary = override.trim();
+  } catch (err) { /* fall back to the constant */ }
+  out.push(primary);
+  try {
+    const owner = Session.getEffectiveUser().getEmail();
+    if (owner && out.indexOf(owner) === -1) out.push(owner);
+  } catch (err) { /* owner address not available - primary alone will do */ }
+  return out.join(',');
+}
+
 function mailLog_(id, action, to, detail) {
   let quota = '';
   try { quota = ' | quota left today: ' + MailApp.getRemainingDailyQuota(); } catch (err) { /* ignore */ }
@@ -735,7 +763,8 @@ function mailLog_(id, action, to, detail) {
 /**
  * Menu: "Ironclad Recruitment" -> "Check email delivery".
  *
- * Sends one test message to CAREERS_EMAIL and reports the remaining quota.
+ * Sends one test message to every address notifyTo_() resolves to, and
+ * reports the remaining quota.
  * MailApp reports success as soon as Google accepts the message, so a pass
  * here means Google sent it - not that it was delivered. If this passes and
  * nothing arrives, the message is being dropped after Google, which for this
@@ -758,20 +787,20 @@ function checkEmailDelivery() {
   }
   const stamp = new Date().toISOString();
   try {
-    MailApp.sendEmail(CAREERS_EMAIL, 'Ironclad Tech — email delivery check',
+    MailApp.sendEmail(notifyTo_(), 'Ironclad Tech — email delivery check',
       'This is a test sent from the recruitment script at ' + stamp + '.\n\n' +
-      'If you are reading it, notifications to ' + CAREERS_EMAIL + ' are being delivered.\n' +
+      'It went to: ' + notifyTo_() + '\n' +
       'If it never arrives, Google accepted the message and something after Google dropped it - ' +
       'for this domain, check that Cloudflare Email Routing has a rule for ' + CAREERS_EMAIL + '.\n\n' +
       'Quota remaining when sent: ' + quota);
-    mailLog_('', 'Delivery check sent', CAREERS_EMAIL, stamp);
+    mailLog_('', 'Delivery check sent', notifyTo_(), stamp);
     ui.alert('Email check',
-      'Google accepted a test message to ' + CAREERS_EMAIL + '.\n\n' +
+      'Google accepted a test message to: ' + notifyTo_() + '\n\n' +
       'Quota left today: ' + quota + '\n\n' +
       'If it does not arrive within a few minutes, the message is being dropped after Google. ' +
       'Check the Cloudflare Email Routing rules for this domain.', ui.ButtonSet.OK);
   } catch (err) {
-    mailLog_('', 'Delivery check FAILED', CAREERS_EMAIL, String(err));
+    mailLog_('', 'Delivery check FAILED', notifyTo_(), String(err));
     ui.alert('Email check', 'Google refused the message: ' + err, ui.ButtonSet.OK);
   }
 }
