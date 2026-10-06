@@ -76,21 +76,24 @@ mark.
 
 | Start | Duration | Element | Move |
 |---|---|---|---|
-| 0.00s | 0.72s | shield outline | stroke draws, `pathLength` normalised to 1000 |
-| 0.50s | 0.50s | gold shield | floods up, `clip-path: inset(100% 0 0 0)` → `inset(0)` |
-| 0.92s | 0.42s | `IT` monogram | stamps down from `scale(1.55)`, overshoot easing |
-| 1.20s | 0.85s | specular sweep | skewed highlight crosses, clipped to the shield |
-| 1.30s | 0.62s | IRONCLAD | tracking `0.42em` → `0.015em` |
-| 1.62s | 0.50s | TECH + rules | fade up |
-| 1.86s | 0.50s | tagline | fade up |
+| 0.00s | 0.56s | shield outline | stroke draws, `pathLength` normalised to 1000 |
+| 0.30s | 0.50s | halo | fades in behind the mark |
+| 0.39s | 0.40s | gold shield | floods up, `clip-path: inset(100% 0 0 0)` → `inset(0)` |
+| 0.39s | 0.62s | gold shield | molten glow peaks at 45%, settles after |
+| 0.72s | 0.36s | `IT` monogram | stamps down from `scale(1.55)`, overshoot easing |
+| 0.72s | 0.42s | halo | spikes to 1.5× on the same cue, so the stamp lands |
+| 0.94s | 0.70s | specular sweep | skewed highlight crosses, clipped to the shield |
+| 1.02s | 0.50s | IRONCLAD | tracking `0.42em` → `0.015em` |
+| 1.28s | 0.40s | TECH + rules | fade up |
+| 1.46s | 0.40s | tagline | fade up |
 
-Total 2.36s. For an alpha export set `--stage: transparent` on `:root` and
+Total 1.86s. For an alpha export set `--stage: transparent` on `:root` and
 record with an alpha-capable codec (WebM/VP9 or ProRes 4444).
 
 ## Rendered video
 
-`video/` holds the intro rendered from `intro.html` at 1920×1080, 30fps, 3.0s
-(2.4s of motion plus a 0.6s hold on the finished mark):
+`video/` holds the intro rendered from `intro.html` at 1920×1080, 30fps, 2.5s
+(1.9s of motion plus a 0.6s hold on the finished mark):
 
 | File | Codec | Use |
 |---|---|---|
@@ -102,6 +105,14 @@ Frames are produced by freezing the CSS timeline: each animation keeps its
 easing and duration, its delay is shifted by −t, and `animation-play-state`
 is paused, so the browser renders exactly the state the live animation holds
 at time t. Re-render with `scratchpad/frames.py` + `render_video.sh`.
+
+These timings are the same ones `assets/site.css` uses for the site's intro
+loader, so the live loader, `intro.html` and the video cannot drift apart.
+Change one, change all three.
+
+The ProRes file is 21MB for 2.5s — larger than the earlier, longer cut,
+because the molten glow adds per-frame detail that ProRes 4444 does not
+compress away.
 
 These are flat-cut renders. Real metal shading and depth is After Effects
 work — the timing sheet above is the spec for whoever does it.
