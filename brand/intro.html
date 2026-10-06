@@ -29,15 +29,22 @@ body{margin:0;background:var(--stage);display:flex;align-items:center;justify-co
 #intro .iwm{opacity:1;letter-spacing:.015em}
 #intro .itag{opacity:1}
 #intro .itech{opacity:1}
-#intro.play .ishield{animation:draw .72s cubic-bezier(.5,0,.2,1) both}
-#intro.play .igold{animation:flood .5s ease-out .5s both}
-#intro.play .imono{animation:stamp .42s cubic-bezier(.3,1.5,.4,1) .92s both}
-#intro.play .isweep{animation:sweep .85s cubic-bezier(.4,0,.3,1) 1.2s both}
-#intro.play .iwm{animation:track .62s cubic-bezier(.22,.9,.25,1) 1.3s both}
-#intro.play .itech{animation:fadeup .5s ease-out 1.62s both}
-#intro.play .itag{animation:fadeup .5s ease-out 1.86s both}
+#intro .ihalo{position:absolute;inset:-34px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,rgba(212,175,55,.26) 0%,transparent 70%)}
+#intro .istage{position:relative;display:grid;place-items:center}
+#intro.play .ishield{animation:draw 560ms cubic-bezier(.5,0,.2,1) both}
+#intro.play .igold{animation:flood 400ms ease-out 390ms both,molten 620ms ease-out 390ms both}
+#intro.play .imono{animation:stamp 360ms cubic-bezier(.3,1.5,.4,1) 720ms both}
+#intro.play .isweep{animation:sweep 700ms cubic-bezier(.4,0,.3,1) 940ms both}
+#intro.play .ihalo{animation:haloin 500ms ease 300ms both,halohit 420ms cubic-bezier(.2,.8,.3,1) 720ms both}
+#intro.play .iwm{animation:track 500ms cubic-bezier(.22,.9,.25,1) 1020ms both}
+#intro.play .itech{animation:fadeup 400ms ease-out 1280ms both}
+#intro.play .itag{animation:fadeup 400ms ease-out 1460ms both}
 @keyframes draw{from{stroke-dashoffset:1000}to{stroke-dashoffset:0}}
 @keyframes flood{from{opacity:0;clip-path:inset(100% 0 0 0)}to{opacity:1;clip-path:inset(0 0 0 0)}}
+@keyframes molten{0%{filter:drop-shadow(0 0 0 rgba(244,211,94,0))}45%{filter:drop-shadow(0 0 16px rgba(244,211,94,.85))}100%{filter:drop-shadow(0 0 4px rgba(212,175,55,.25))}}
+@keyframes haloin{to{opacity:1}}
+@keyframes halohit{0%{transform:scale(1)}35%{transform:scale(1.5);opacity:.95}100%{transform:scale(1);opacity:.6}}
 @keyframes stamp{from{opacity:0;transform:scale(1.55)}to{opacity:1;transform:scale(1)}}
 @keyframes sweep{from{opacity:.95;transform:translateX(-45px) skewX(-16deg)}65%{opacity:.95}to{opacity:0;transform:translateX(140px) skewX(-16deg)}}
 @keyframes track{from{opacity:0;letter-spacing:.42em}to{opacity:1;letter-spacing:.015em}}
@@ -94,7 +101,7 @@ body{margin:0;background:var(--stage);display:flex;align-items:center;justify-co
   </symbol>
 </defs></svg>
 <div class="lock-stack" id="intro">
-  <svg viewBox="0 0 120 140" width="154" height="180" style="overflow:visible;flex:0 0 auto" role="img" aria-label="Ironclad Tech">
+  <div class="istage"><div class="ihalo"></div><svg viewBox="0 0 120 140" width="154" height="180" style="overflow:visible;flex:0 0 auto" role="img" aria-label="Ironclad Tech">
     <path class="ishield" pathLength="1000" fill="none" stroke="#D4AF37" stroke-width="3" stroke-linejoin="round" d="M10 14 H110 A4 4 0 0 1 114 18 V66 C114 100 94 124 60 136 C26 124 6 100 6 66 V18 A4 4 0 0 1 10 14 Z"/>
     <path class="igold" fill-rule="evenodd" fill="url(#gFlat)" d="M10 14 H110 A4 4 0 0 1 114 18 V66 C114 100 94 124 60 136 C26 124 6 100 6 66 V18 A4 4 0 0 1 10 14 Z M20 25 H100 V66 C100 91 86 109 60 118 C34 109 20 91 20 66 Z"/>
     <g class="imono">
@@ -102,7 +109,7 @@ body{margin:0;background:var(--stage);display:flex;align-items:center;justify-co
       <path fill="url(#gFlat)" d="M57 34 H93 V46 H81 V104 H69 V46 H57 Z"/>
     </g>
     <g clip-path="url(#cShield)"><rect class="isweep" x="0" y="-25" width="26" height="195" fill="url(#gSweep)"/></g>
-  </svg>
+  </svg></div>
   <span class="wm-stack iwm">IRONCLAD</span>
   <span class="techline itech"><span class="rule"></span><span>TECH</span><span class="rule r"></span></span>
   <span class="tagfix itag">Built on Trust. Powered by Technology.</span>

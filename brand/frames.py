@@ -8,7 +8,7 @@ OUT = pathlib.Path('/tmp/claude-0/-home-user-claude-work1/'
                    '2357a8fe-4ab8-5d2f-b2ea-2560df6eb85c/scratchpad/frames')
 OUT.mkdir(exist_ok=True)
 
-W, H, FPS, RUN, HOLD = 1920, 1080, 30, 2.40, 0.60
+W, H, FPS, RUN, HOLD = 1920, 1080, 30, 1.90, 0.60
 
 SHIELD = ('M10 14 H110 A4 4 0 0 1 114 18 V66 C114 100 94 124 60 136 '
           'C26 124 6 100 6 66 V18 A4 4 0 0 1 10 14 Z')
@@ -18,18 +18,20 @@ GT = 'M57 34 H93 V46 H81 V104 H69 V46 H57 Z'
 
 # (class, keyframe, duration, delay, easing) — identical to brand/intro.html
 TIMELINE = [
-    ('ishield', 'draw',   0.72, 0.00, 'cubic-bezier(.5,0,.2,1)'),
-    ('igold',   'flood',  0.50, 0.50, 'ease-out'),
-    ('imono',   'stamp',  0.42, 0.92, 'cubic-bezier(.3,1.5,.4,1)'),
-    ('isweep',  'sweep',  0.85, 1.20, 'cubic-bezier(.4,0,.3,1)'),
-    ('iwm',     'track',  0.62, 1.30, 'cubic-bezier(.22,.9,.25,1)'),
-    ('itech',   'fadeup', 0.50, 1.62, 'ease-out'),
-    ('itag',    'fadeup', 0.50, 1.86, 'ease-out'),
+    ('ishield', 'draw',   0.56, 0.00, 'cubic-bezier(.5,0,.2,1)'),
+    ('igold',   'flood',  0.40, 0.39, 'ease-out'),
+    ('igold',   'molten', 0.62, 0.39, 'ease-out'),
+    ('imono',   'stamp',  0.36, 0.72, 'cubic-bezier(.3,1.5,.4,1)'),
+    ('isweep',  'sweep',  0.70, 0.94, 'cubic-bezier(.4,0,.3,1)'),
+    ('iwm',     'track',  0.50, 1.02, 'cubic-bezier(.22,.9,.25,1)'),
+    ('itech',   'fadeup', 0.40, 1.28, 'ease-out'),
+    ('itag',    'fadeup', 0.40, 1.46, 'ease-out'),
 ]
 
 KEYFRAMES = """
 @keyframes draw{from{stroke-dashoffset:1000}to{stroke-dashoffset:0}}
 @keyframes flood{from{opacity:0;clip-path:inset(100% 0 0 0)}to{opacity:1;clip-path:inset(0 0 0 0)}}
+@keyframes molten{0%{filter:drop-shadow(0 0 0 rgba(244,211,94,0))}45%{filter:drop-shadow(0 0 16px rgba(244,211,94,.85))}100%{filter:drop-shadow(0 0 4px rgba(212,175,55,.25))}}
 @keyframes stamp{from{opacity:0;transform:scale(1.55)}to{opacity:1;transform:scale(1)}}
 @keyframes sweep{from{opacity:.95;transform:translateX(-45px) skewX(-16deg)}65%{opacity:.95}to{opacity:0;transform:translateX(140px) skewX(-16deg)}}
 @keyframes track{from{opacity:0;letter-spacing:.42em}to{opacity:1;letter-spacing:.015em}}
@@ -84,10 +86,12 @@ svg{{display:block}}
 n_frames = round((RUN + HOLD) * FPS)
 for i in range(n_frames):
     t = min(i / FPS, RUN)
+    by_sel = {}
+    for cls, kf, dur, delay, ease in TIMELINE:
+        by_sel.setdefault(cls, []).append(f'{kf} {dur}s {ease} {delay - t:.4f}s both')
     rules = '\n'.join(
-        f'#intro .{cls}{{animation:{kf} {dur}s {ease} both;'
-        f'animation-delay:{delay - t:.4f}s;animation-play-state:paused}}'
-        for cls, kf, dur, delay, ease in TIMELINE)
+        f'#intro .{cls}{{animation:{", ".join(parts)};animation-play-state:paused}}'
+        for cls, parts in by_sel.items())
     (OUT / f'f{i:04d}.html').write_text(
         f'<!doctype html><meta charset=utf-8>{FONTS}<style>{STATIC}\n{rules}</style>{BODY}',
         encoding='utf-8')
