@@ -297,6 +297,7 @@ function onOpen() {
     .addItem('Staff access codes', 'showStaffCodes')
     .addItem('Review page link', 'showLink')
     .addItem('Repair phone numbers', 'fixPhoneNumbers')
+    .addItem('Check email delivery', 'checkEmailDelivery')
     .addSeparator()
     .addItem('Install nightly cleanup', 'installCleanup')
     .addItem('Run cleanup now', 'purgeOldFiles')
@@ -672,7 +673,12 @@ function notify_(id, v, subjectKind, cv, voice) {
     MailApp.sendEmail(CAREERS_EMAIL,
       subjectKind + ': ' + (v[norm_('Full Name')] || 'Applicant') + ' — ' + (v[norm_('Role')] || '') + ' (' + id + ')',
       lines.join('\n'));
-  } catch (err) { /* a failed notification must never fail the application */ }
+    mailLog_(id, 'Notified', CAREERS_EMAIL, '');
+  } catch (err) {
+    // Still must not fail the application - the row is already written - but a
+    // notification that vanishes silently is how an applicant goes unnoticed.
+    mailLog_(id, 'Notify FAILED', CAREERS_EMAIL, err && err.message ? err.message : String(err));
+  }
 }
 
 function ack_(id, v) {
@@ -709,7 +715,65 @@ function ack_(id, v) {
       name: 'Ironclad Tech Recruitment',
       replyTo: CAREERS_EMAIL,
     });
-  } catch (err) { /* as above */ }
+    mailLog_(id, 'Acknowledged', to, '');
+  } catch (err) {
+    mailLog_(id, 'Acknowledge FAILED', to, err && err.message ? err.message : String(err));
+  }
+}
+
+// MailApp swallows nothing here: every send attempt lands in the log tab with
+// the remaining daily quota, so a dropped notification is visible in the sheet
+// rather than being discovered when an applicant asks why nobody called.
+function mailLog_(id, action, to, detail) {
+  let quota = '';
+  try { quota = ' | quota left today: ' + MailApp.getRemainingDailyQuota(); } catch (err) { /* ignore */ }
+  try {
+    log_(SpreadsheetApp.getActive(), 'mail', id, action, (to || '') + (detail ? ' | ' + detail : '') + quota);
+  } catch (err) { /* logging must never throw */ }
+}
+
+/**
+ * Menu: "Ironclad Recruitment" -> "Check email delivery".
+ *
+ * Sends one test message to CAREERS_EMAIL and reports the remaining quota.
+ * MailApp reports success as soon as Google accepts the message, so a pass
+ * here means Google sent it - not that it was delivered. If this passes and
+ * nothing arrives, the message is being dropped after Google, which for this
+ * domain means the Cloudflare Email Routing rule for the address.
+ */
+function checkEmailDelivery() {
+  const ui = SpreadsheetApp.getUi();
+  let quota;
+  try {
+    quota = MailApp.getRemainingDailyQuota();
+  } catch (err) {
+    ui.alert('Email check', 'Could not read the mail quota: ' + err, ui.ButtonSet.OK);
+    return;
+  }
+  if (quota <= 0) {
+    ui.alert('Email check',
+      'The daily email quota for this account is used up, so every notification today was dropped. ' +
+      'It resets every 24 hours.', ui.ButtonSet.OK);
+    return;
+  }
+  const stamp = new Date().toISOString();
+  try {
+    MailApp.sendEmail(CAREERS_EMAIL, 'Ironclad Tech — email delivery check',
+      'This is a test sent from the recruitment script at ' + stamp + '.\n\n' +
+      'If you are reading it, notifications to ' + CAREERS_EMAIL + ' are being delivered.\n' +
+      'If it never arrives, Google accepted the message and something after Google dropped it - ' +
+      'for this domain, check that Cloudflare Email Routing has a rule for ' + CAREERS_EMAIL + '.\n\n' +
+      'Quota remaining when sent: ' + quota);
+    mailLog_('', 'Delivery check sent', CAREERS_EMAIL, stamp);
+    ui.alert('Email check',
+      'Google accepted a test message to ' + CAREERS_EMAIL + '.\n\n' +
+      'Quota left today: ' + quota + '\n\n' +
+      'If it does not arrive within a few minutes, the message is being dropped after Google. ' +
+      'Check the Cloudflare Email Routing rules for this domain.', ui.ButtonSet.OK);
+  } catch (err) {
+    mailLog_('', 'Delivery check FAILED', CAREERS_EMAIL, String(err));
+    ui.alert('Email check', 'Google refused the message: ' + err, ui.ButtonSet.OK);
+  }
 }
 
 function interviewHeaders_() {
