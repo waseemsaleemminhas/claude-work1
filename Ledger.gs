@@ -3298,9 +3298,48 @@ function jsonOut_(value) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+/**
+ * Categories somebody invented on a phone while they were out. Matched on name,
+ * because that is what the entries point at: one that is already here is left
+ * exactly as it is, and a new one is written down marked "New" for an admin to
+ * tidy later. Returns the names that were actually added.
+ */
+function takeCategories_(ss, person, sent, ctx) {
+  if (!sent || !sent.length) return [];
+  const t = lgTable_(ss, LG_CATS);
+  const added = [];
+  sent.slice(0, 50).forEach(function (raw) {
+    const name = txt_(raw && raw.name, 80);
+    if (!name || ctx.categoryByName[name.toLowerCase()]) return;
+    const kind = txt_(raw.kind, 20) === INCOME ? INCOME : EXPENSE;
+    lgAppend_(t, {
+      'ID': uid_('c'),
+      'Name': name,
+      'Group': txt_(raw.group, 80) || (kind === INCOME ? 'Income' : 'Admin & financial'),
+      'Kind': kind,
+      'Icon': txt_(raw.icon, 8) || '🏷️',
+      'Colour': txt_(raw.colour, 20) || '#5C6BC0',
+      'Default Rule': '',
+      'Cost Centre': '',
+      'Monthly Budget': '',
+      'New': 'Yes',
+      'Merged Into': '',
+      'Archived': '',
+      'Sort': 9000,
+      'Added By': person.email || person.name,
+      'Added At': new Date(),
+    });
+    ctx.categoryByName[name.toLowerCase()] = { name: name, kind: kind };
+    added.push(name);
+  });
+  if (added.length) note_(ss, person, 'Took ' + added.length + ' new categories from a phone: ' + added.join(', '));
+  return added;
+}
+
 function syncLedger_(req) {
   return guarded_(req, function (ss, person) {
     const ctx = context_(ss);
+    const newCategories = takeCategories_(ss, person, req.categories, ctx);
     const t = lgTable_(ss, LG_ENTRIES);
     const accepted = [];
     const rejected = {};
@@ -3357,14 +3396,19 @@ function syncLedger_(req) {
       .filter(function (entry) { return !mine[entry.id] && entryChangedAt_(entry) > since; })
       .slice(0, 500);
 
+    let url = '';
+    try { url = ss.getUrl(); } catch (err) { url = ''; }
+
     return {
       ok: true,
       now: Date.now(),
       accepted: accepted,
       rejected: rejected,
+      addedCategories: newCategories,
+      sheetUrl: url,
       entries: changed,
       campaigns: ctx.campaignList,
-      categories: ctx.categoryList,
+      categories: newCategories.length ? categories_(ss) : ctx.categoryList,
       accounts: ctx.accountList,
       rules: ctx.ruleList,
     };

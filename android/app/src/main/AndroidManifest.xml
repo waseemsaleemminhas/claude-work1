@@ -24,6 +24,17 @@
             </intent-filter>
         </activity>
 
+        <!-- So the exported spreadsheet can be handed to WhatsApp, Gmail or Drive. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_files" />
+        </provider>
+
         <!-- Quick entry from the home screen. -->
         <receiver
             android:name=".QuickEntryWidget"

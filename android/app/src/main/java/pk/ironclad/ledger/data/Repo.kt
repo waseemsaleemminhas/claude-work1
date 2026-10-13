@@ -21,6 +21,7 @@ data class Prefs(
     val endpoint: String = "",
     val code: String = "",
     val lastSync: Long = 0,
+    val sheetUrl: String = "",
 ) {
     val onboarded: Boolean get() = me.isNotBlank()
     val canSync: Boolean get() = endpoint.isNotBlank()
@@ -77,6 +78,7 @@ class Repo private constructor(context: Context) {
                 endpoint = map["endpoint"].orEmpty(),
                 code = map["code"].orEmpty(),
                 lastSync = map["lastSync"]?.toLongOrNull() ?: 0,
+                sheetUrl = map["sheetUrl"].orEmpty(),
             ),
         )
     }.stateIn(scope, SharingStarted.Eagerly, LedgerState())
@@ -141,6 +143,9 @@ class Repo private constructor(context: Context) {
 
     suspend fun dirtyEntries(): List<Entry> = dao.dirtyEntries().map { it.toEntry() }
 
+    /** Categories somebody invented on this phone that the shared book has not seen. */
+    suspend fun unsentCategories(): List<Category> = dao.unsentCategories().map { it.toCategory() }
+
     suspend fun markSynced(ids: List<String>) = dao.markClean(ids)
 
     /** What the server sent back, written over what we hold, row by row. */
@@ -155,8 +160,28 @@ class Repo private constructor(context: Context) {
             val keep = entries.filter { mine[it.id] == null }
             if (keep.isNotEmpty()) dao.putEntries(keep.map { EntryRow.of(it, dirty = false) })
         }
-        if (categories.isNotEmpty()) dao.putCategories(categories.map { CategoryRow.of(it) })
-        if (accounts.isNotEmpty()) dao.putAccounts(accounts.map { AccountRow.of(it) })
+        if (categories.isNotEmpty()) {
+            dao.putCategories(categories.map { CategoryRow.of(it) })
+            // The book keeps its own ids. Where a name we already hold now has a
+            // copy from the book, our own row goes: entries point at names, so
+            // nothing breaks, and the picker shows one of each instead of two.
+            dropOurOwn(categories.map { it.id to it.name }, dao.allCategories().map { it.id to it.name })
+                .let { if (it.isNotEmpty()) dao.dropCategories(it) }
+        }
+        if (accounts.isNotEmpty()) {
+            dao.putAccounts(accounts.map { AccountRow.of(it) })
+            dropOurOwn(accounts.map { it.id to it.name }, dao.allAccounts().map { it.id to it.name })
+                .let { if (it.isNotEmpty()) dao.dropAccounts(it) }
+        }
+    }
+
+    /** Local ids for names the book has now given an id of its own. */
+    private fun dropOurOwn(theirs: List<Pair<String, String>>, ours: List<Pair<String, String>>): List<String> {
+        val byName = theirs.associate { (id, name) -> name.trim().lowercase() to id }
+        return ours.filter { (id, name) ->
+            val canonical = byName[name.trim().lowercase()]
+            canonical != null && canonical != id
+        }.map { it.first }
     }
 
     companion object {

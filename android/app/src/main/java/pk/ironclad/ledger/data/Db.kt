@@ -162,6 +162,14 @@ interface LedgerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putRules(rows: List<RuleRow>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMeta(row: MetaRow)
 
+    @Query("SELECT * FROM categories WHERE isNew = 1 AND id LIKE 'cat-%'")
+    suspend fun unsentCategories(): List<CategoryRow>
+
+    @Query("SELECT * FROM categories") suspend fun allCategories(): List<CategoryRow>
+    @Query("SELECT * FROM accounts") suspend fun allAccounts(): List<AccountRow>
+    @Query("DELETE FROM categories WHERE id IN (:ids)") suspend fun dropCategories(ids: List<String>)
+    @Query("DELETE FROM accounts WHERE id IN (:ids)") suspend fun dropAccounts(ids: List<String>)
+
     @Query("SELECT COUNT(*) FROM categories") suspend fun categoryCount(): Int
 
     /** What has gone out on one day — the figure the home-screen widget shows. */

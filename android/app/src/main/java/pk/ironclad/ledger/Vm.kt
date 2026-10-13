@@ -1,13 +1,18 @@
 package pk.ironclad.ledger
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import pk.ironclad.ledger.data.Entry
+import pk.ironclad.ledger.data.Export
 import pk.ironclad.ledger.data.LedgerState
 import pk.ironclad.ledger.data.Line
 import pk.ironclad.ledger.data.Money
@@ -286,6 +291,24 @@ class Vm(app: Application) : AndroidViewModel(app) {
     }
 
     fun setPref(key: String, value: String) = work("remember that") { repo.setPref(key, value) }
+
+    /** Hand the whole book to whatever app can take a spreadsheet. */
+    fun exportSpreadsheet() = work("export the spreadsheet") {
+        val entries = repo.state.value.entries
+        if (entries.isEmpty()) { toast("Nothing to export yet."); return@work }
+        val file = withContext(Dispatchers.IO) { Export.write(getApplication(), entries) }
+        getApplication<Application>().startActivity(Export.shareIntent(getApplication(), file))
+        toast(entries.size.toString() + " vouchers ready to send.")
+    }
+
+    /** Open the Google Sheet itself, once a sync has told us where it is. */
+    fun openSpreadsheet() = work("open the spreadsheet") {
+        val url = repo.state.value.prefs.sheetUrl
+        if (url.isBlank()) { toast("Sync once first, then the sheet opens from here."); return@work }
+        getApplication<Application>().startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
 
     fun syncNow() {
         if (ui.value.syncing) return

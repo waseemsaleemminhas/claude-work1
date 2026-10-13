@@ -1,13 +1,17 @@
 package pk.ironclad.ledger.data
 
 import android.content.Context
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -23,6 +27,7 @@ data class SyncPush(
     val device: String,
     val since: Long,
     val entries: List<Entry>,
+    val categories: List<Category> = emptyList(),
 )
 
 @Serializable
@@ -32,6 +37,8 @@ data class SyncPull(
     val now: Long = 0,
     val accepted: List<String> = emptyList(),
     val rejected: Map<String, String> = emptyMap(),
+    val addedCategories: List<String> = emptyList(),
+    val sheetUrl: String = "",
     val entries: List<Entry> = emptyList(),
     val categories: List<Category> = emptyList(),
     val accounts: List<Account> = emptyList(),
@@ -54,9 +61,13 @@ object Sync {
         if (!prefs.canSync) return@withContext "No server set yet — everything is on this phone."
 
         val mine = repo.dirtyEntries()
+        val invented = repo.unsentCategories()
         val body = json.encodeToString(
             SyncPush.serializer(),
-            SyncPush(code = prefs.code, device = prefs.me, since = prefs.lastSync, entries = mine),
+            SyncPush(
+                code = prefs.code, device = prefs.me, since = prefs.lastSync,
+                entries = mine, categories = invented,
+            ),
         )
 
         val reply = try {
@@ -75,6 +86,7 @@ object Sync {
         }.onFailure { return@withContext "Could not file what came back: " + (it.message ?: "unknown") }
         if (answer.accepted.isNotEmpty()) repo.markSynced(answer.accepted)
         repo.setPref("lastSync", answer.now.toString())
+        if (answer.sheetUrl.isNotBlank()) repo.setPref("sheetUrl", answer.sheetUrl)
         pk.ironclad.ledger.QuickEntryWidget.refresh(context)
 
         val pushed = answer.accepted.size
@@ -82,7 +94,10 @@ object Sync {
         when {
             answer.rejected.isNotEmpty() ->
                 "Sent $pushed, took back $pulled, ${answer.rejected.size} the server would not take."
-            pushed == 0 && pulled == 0 -> "Already up to date."
+            pushed == 0 && pulled == 0 && answer.addedCategories.isEmpty() -> "Already up to date."
+            answer.addedCategories.isNotEmpty() ->
+                "Sent $pushed, took back $pulled, and ${answer.addedCategories.size} new " +
+                    (if (answer.addedCategories.size == 1) "category." else "categories.")
             else -> "Sent $pushed, took back $pulled."
         }
     }
@@ -129,6 +144,7 @@ object Sync {
     }
 
     private const val WORK = "ledger-sync"
+    private const val ROUNDS = "ledger-sync-rounds"
 
     /** Ask for a sync when there is a network. Harmless to call often. */
     fun nudge(context: Context) {
@@ -138,6 +154,23 @@ object Sync {
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, request)
+        }
+    }
+
+    /**
+     * Catch up on a quiet schedule, so each of us sees the other's entries
+     * without anybody remembering to tap anything. Half an hour is often
+     * enough for a day's costs and gentle on a phone's battery; Android may
+     * hold it back a little when the phone is idle, which is fine.
+     */
+    fun schedule(context: Context) {
+        runCatching {
+            val request = PeriodicWorkRequestBuilder<SyncWorker>(30, TimeUnit.MINUTES)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniquePeriodicWork(ROUNDS, ExistingPeriodicWorkPolicy.KEEP, request)
         }
     }
 }

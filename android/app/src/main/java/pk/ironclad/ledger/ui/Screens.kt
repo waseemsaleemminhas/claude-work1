@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -220,6 +222,31 @@ fun SettingsScreen(vm: Vm, state: LedgerState) {
                     if (state.prefs.lastSync == 0L) "Never synced yet." else "Last synced with the sheet.",
                     fontSize = 11.sp, color = Ink.muted, modifier = Modifier.padding(top = 6.dp),
                 )
+                if (state.prefs.sheetUrl.isNotBlank()) {
+                    Spacer(Modifier.size(8.dp))
+                    OutlinedButton(
+                        onClick = { vm.openSpreadsheet() },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) { Text("Open the Google Sheet") }
+                }
+            }
+        }
+
+        Card(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+            Column {
+                Text("Export", fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(bottom = 8.dp))
+                Text(
+                    "A spreadsheet of every voucher on this phone, one row per line, ready for Excel " +
+                        "or Google Sheets. Works with no signal.",
+                    fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Button(
+                    onClick = { vm.exportSpreadsheet() },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink.brand),
+                    shape = RoundedCornerShape(12.dp),
+                ) { Text("Export spreadsheet", fontWeight = FontWeight.SemiBold) }
             }
         }
 
