@@ -1,8 +1,13 @@
 name: Build the ledger APK
 
 # Builds an installable APK with no Android SDK on anyone's machine, and no cost:
-# push a tag like v0.1.0 and the APK is attached to a GitHub Release for the team
-# to download on their phones.
+# push a tag like v0.4.0 and a signed APK is attached to a GitHub Release for the
+# team to download on their phones.
+#
+# Signing: the team's key lives in four repository secrets, never in git. Without
+# them the build still works for checking a branch, but it is signed with a
+# throwaway debug key — so a tagged release without the secrets is refused
+# outright rather than handed round and failing to install over the last one.
 
 on:
   push:
@@ -13,9 +18,14 @@ on:
     paths: ['android/**']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +36,26 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: A release must be signed with the team key
+        if: startsWith(github.ref, 'refs/tags/v') && env.KEYSTORE_BASE64 == ''
+        run: |
+          echo "::error::No signing key. A debug-signed APK cannot install over" \
+               "the last one, and would force everyone to uninstall and lose" \
+               "anything not yet synced. Add the KEYSTORE_BASE64," \
+               "KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD secrets."
+          exit 1
+
+      - name: Put the signing key in place
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/ironclad-release.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=ironclad-release.jks
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+
       - name: Unit tests
         working-directory: android
         run: ./gradlew testDebugUnitTest
@@ -34,13 +64,34 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
+      - name: Say which key signed it
+        working-directory: android
+        run: |
+          TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$TOOLS/apksigner" verify --print-certs app/build/outputs/apk/release/*.apk \
+            | grep -E "certificate DN|SHA-256 digest"
+
+      - name: Name it for the people installing it
+        id: name
+        working-directory: android
+        run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          cp app/build/outputs/apk/release/app-release.apk \
+             "app/build/outputs/apk/release/ironclad-ledger-$VERSION.apk"
+          echo "apk=android/app/build/outputs/apk/release/ironclad-ledger-$VERSION.apk" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ledger-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: ${{ steps.name.outputs.apk }}
 
       - name: Attach it to the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/*.apk
+          files: ${{ steps.name.outputs.apk }}
+          body: |
+            Install this on an Android phone (7.0 or newer).
+
+            Sync before you update, then just tap the file — it installs over the
+            version you have and keeps everything on the phone.
