@@ -111,6 +111,11 @@ data class Draft(
 ) {
     val editing: Boolean get() = id.isNotBlank()
 
+    /** Has anything been typed? An untouched draft can close without a word. */
+    val started: Boolean get() = calc.amountMinor > 0 || calc.cur.isNotBlank() || calc.op != null ||
+        line.category.isNotBlank() || line.description.isNotBlank() ||
+        vendor.isNotBlank() || reference.isNotBlank() || note.isNotBlank()
+
     fun withLine(change: (Line) -> Line): Draft = copy(line = change(line))
 
     /** The amount being typed is this voucher's amount. */
@@ -130,6 +135,7 @@ data class Ui(
     val pickerOpen: String = "",
     val toast: String = "",
     val syncing: Boolean = false,
+    val confirmDiscard: Boolean = false,
 )
 
 class Vm(app: Application) : AndroidViewModel(app) {
@@ -213,7 +219,29 @@ class Vm(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun closeEntry() = set { it.copy(draft = null, datePickerOpen = false, newCategoryOpen = false) }
+    fun closeEntry() = set {
+        it.copy(draft = null, datePickerOpen = false, newCategoryOpen = false, confirmDiscard = false)
+    }
+
+    /**
+     * Anything but Add or Discard leaves the entry exactly where it was. A
+     * half-written voucher is somebody's work: a stray swipe while scrolling,
+     * a tap outside, the back button — none of them may throw it away.
+     */
+    fun tryClose() = set {
+        when {
+            it.draft == null -> it
+            it.draft.started -> it.copy(confirmDiscard = true)
+            else -> it.copy(draft = null, datePickerOpen = false, newCategoryOpen = false)
+        }
+    }
+
+    fun keepWriting() = set { it.copy(confirmDiscard = false) }
+
+    fun discardEntry() {
+        closeEntry()
+        toast("Entry discarded.")
+    }
 
     fun setDate(date: String) = set {
         it.copy(draft = it.draft?.copy(date = date), datePickerOpen = false)

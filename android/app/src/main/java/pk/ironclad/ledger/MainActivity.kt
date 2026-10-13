@@ -25,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
@@ -33,6 +35,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -161,13 +164,20 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
     val draft = ui.draft
     if (draft != null) {
         ModalBottomSheet(
-            onDismissRequest = { vm.closeEntry() },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            // Only Add or Discard may close this. A swipe while scrolling the
+            // categories used to throw away everything typed so far.
+            onDismissRequest = { vm.tryClose() },
+            sheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = true,
+                confirmValueChange = { value -> value != SheetValue.Hidden },
+            ),
             containerColor = Ink.bg,
             contentColor = Ink.text,
+            dragHandle = null,
         ) {
             Column(Modifier.fillMaxWidth()) {
                 if (ui.toast.isNotBlank()) SheetMessage(ui.toast)
+                if (ui.confirmDiscard) DiscardBar(vm)
                 when {
                     ui.newCategoryOpen -> NewCategorySheet(vm, state)
                     else -> EntrySheet(vm, state, ui, draft)
@@ -255,6 +265,46 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
 }
 
 /** What the app has to say, where it can actually be seen: inside the sheet. */
+/**
+ * Shown only when something was typed and the sheet was asked to close. Nothing
+ * is thrown away until Discard is tapped here, on purpose.
+ */
+@Composable
+fun DiscardBar(vm: Vm) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Ink.bad.copy(alpha = 0.14f))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Text(
+            "Throw this entry away?",
+            fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink.text,
+        )
+        Text(
+            "Nothing has been saved yet.",
+            fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(top = 2.dp),
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = { vm.keepWriting() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Ink.brand),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text("Keep writing", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+            Button(
+                onClick = { vm.discardEntry() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Ink.bad),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text("Discard", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+        }
+    }
+}
+
 @Composable
 fun SheetMessage(text: String) {
     Row(

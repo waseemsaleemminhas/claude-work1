@@ -177,11 +177,32 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
         Box(Modifier.size(10.dp))
         Chip("📅  " + dateLabel(draft.date)) { vm.set { it.copy(datePickerOpen = true) } }
 
-        Text(
-            if (draft.more) "Fewer details ▴" else "Who it was paid to, bill no., note ▾",
-            fontSize = 13.sp, color = Ink.brand,
-            modifier = Modifier.padding(vertical = 10.dp).clickable { vm.editDraft { it.copy(more = !it.more) } },
-        )
+        // A proper row you can hit with a thumb, not a line of text to aim at.
+        val filled = listOf(draft.vendor, draft.reference, line.description, draft.note).count { it.isNotBlank() }
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Ink.card)
+                .border(1.dp, if (draft.more) Ink.brand else Ink.line, RoundedCornerShape(12.dp))
+                .clickable { vm.editDraft { it.copy(more = !it.more) } }
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("📝", fontSize = 15.sp, modifier = Modifier.padding(end = 10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Paid to, bill no., note", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink.text)
+                if (filled > 0 && !draft.more) {
+                    Text(
+                        listOf(draft.vendor, draft.reference, line.description, draft.note)
+                            .filter { it.isNotBlank() }.joinToString(" · "),
+                        fontSize = 12.sp, color = Ink.muted, maxLines = 1,
+                    )
+                } else {
+                    Text(if (draft.more) "Tap to fold away" else "Optional", fontSize = 12.sp, color = Ink.muted)
+                }
+            }
+            Text(if (draft.more) "▴" else "▾", fontSize = 16.sp, color = Ink.brand)
+        }
 
         if (draft.more) {
             if (!transfer) {
@@ -216,7 +237,7 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
                 colour = Ink.bad,
             ) { vm.voidEntry() }
         }
-        GhostButton("Close") { vm.closeEntry() }
+        GhostButton(if (draft.started) "Discard this entry" else "Close") { vm.tryClose() }
         Box(Modifier.size(18.dp))
     }
 }
