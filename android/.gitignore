@@ -7,3 +7,7 @@ keystore.properties
 .idea/
 *.iml
 .kotlin/
+
+# built artefacts come from CI, not from git
+*.apk
+*.aab
