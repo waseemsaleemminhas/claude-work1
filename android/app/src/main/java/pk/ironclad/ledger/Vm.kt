@@ -108,6 +108,8 @@ data class Draft(
     val calc: Calc = Calc(),
     val more: Boolean = false,
     val armed: Boolean = false,
+    /** What an entry opened for a look held when it was opened. */
+    val origin: String = "",
 ) {
     val editing: Boolean get() = id.isNotBlank()
 
@@ -115,6 +117,19 @@ data class Draft(
     val started: Boolean get() = calc.amountMinor > 0 || calc.cur.isNotBlank() || calc.op != null ||
         line.category.isNotBlank() || line.description.isNotBlank() ||
         vendor.isNotBlank() || reference.isNotBlank() || note.isNotBlank()
+
+    /** Everything that would be written, as one string, for telling changes apart. */
+    fun stamp(): String = listOf(
+        date, type, account, toAccount, vendor, reference, note,
+        line.category, line.description, calc.amountMinor.toString(),
+    ).joinToString("|")
+
+    /**
+     * Is there anything here that would be lost? For a new voucher, anything
+     * typed. For one opened to look at, only a real change — opening an entry
+     * and pressing back should simply close it.
+     */
+    val worthKeeping: Boolean get() = if (origin.isBlank()) started else stamp() != origin
 
     fun withLine(change: (Line) -> Line): Draft = copy(line = change(line))
 
@@ -136,6 +151,8 @@ data class Ui(
     val toast: String = "",
     val syncing: Boolean = false,
     val confirmDiscard: Boolean = false,
+    /** What has been typed into the category search box. */
+    val catQuery: String = "",
 )
 
 class Vm(app: Application) : AndroidViewModel(app) {
@@ -182,9 +199,9 @@ class Vm(app: Application) : AndroidViewModel(app) {
     // ---- putting something in
 
     /**
-     * [askDate] opens the calendar straight away, on today. Tapping − or + is
-     * often somebody writing up yesterday's cost, so the day comes first and
-     * the keypad is waiting behind it. Cancel simply keeps today.
+     * Today is the day unless somebody says otherwise, so the keypad comes up
+     * ready to use and the date chip is there for the cost that is being
+     * written up late. [askDate] opens the calendar first instead.
      */
     fun startEntry(type: String = Type.EXPENSE, category: String = "", askDate: Boolean = false) {
         val state = ledger.value
@@ -200,27 +217,28 @@ class Vm(app: Application) : AndroidViewModel(app) {
                     line = Line(category = category),
                 ),
                 datePickerOpen = askDate,
+                catQuery = "",
             )
         }
     }
 
     fun openEntry(entry: Entry) {
         if (entry.status == Status.VOID) return toast("That entry was voided.")
-        set {
-            it.copy(
-                draft = Draft(
-                    id = entry.id, type = entry.type, date = entry.date, account = entry.account,
-                    toAccount = entry.toAccount, vendor = entry.vendor, reference = entry.reference,
-                    note = entry.note,
-                    line = entry.lines.firstOrNull() ?: Line(),
-                    calc = Calc.of(entry.lines.firstOrNull()?.amountMinor ?: entry.totalMinor),
-                ),
-            )
-        }
+        val opened = Draft(
+            id = entry.id, type = entry.type, date = entry.date, account = entry.account,
+            toAccount = entry.toAccount, vendor = entry.vendor, reference = entry.reference,
+            note = entry.note,
+            line = entry.lines.firstOrNull() ?: Line(),
+            calc = Calc.of(entry.lines.firstOrNull()?.amountMinor ?: entry.totalMinor),
+        )
+        set { it.copy(draft = opened.copy(origin = opened.stamp()), catQuery = "") }
     }
 
     fun closeEntry() = set {
-        it.copy(draft = null, datePickerOpen = false, newCategoryOpen = false, confirmDiscard = false)
+        it.copy(
+            draft = null, datePickerOpen = false, newCategoryOpen = false,
+            confirmDiscard = false, catQuery = "",
+        )
     }
 
     /**
@@ -231,17 +249,21 @@ class Vm(app: Application) : AndroidViewModel(app) {
     fun tryClose() = set {
         when {
             it.draft == null -> it
-            it.draft.started -> it.copy(confirmDiscard = true)
-            else -> it.copy(draft = null, datePickerOpen = false, newCategoryOpen = false)
+            it.newCategoryOpen -> it.copy(newCategoryOpen = false)
+            it.draft.worthKeeping -> it.copy(confirmDiscard = true)
+            else -> it.copy(draft = null, datePickerOpen = false, catQuery = "")
         }
     }
 
     fun keepWriting() = set { it.copy(confirmDiscard = false) }
 
     fun discardEntry() {
+        val wasEdit = ui.value.draft?.editing == true
         closeEntry()
-        toast("Entry discarded.")
+        toast(if (wasEdit) "Changes dropped." else "Entry discarded.")
     }
+
+    fun searchCategories(text: String) = set { it.copy(catQuery = text) }
 
     fun setDate(date: String) = set {
         it.copy(draft = it.draft?.copy(date = date), datePickerOpen = false)

@@ -14,6 +14,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -158,22 +159,18 @@ class ScreenTest {
     }
 
     @Test
-    fun `tapping minus asks the day first, with the keypad waiting behind it`() {
+    fun `PKR OUT opens the keypad on today, with no calendar in the way`() {
         vm.setPref("me", "Ali")
         waitForLedger()
         start()
-        compose.onNodeWithText("−").performClick()
+        compose.onNodeWithText("PKR OUT").performClick()
         pump()
-        assertTrue("the calendar came up by itself", vm.ui.value.datePickerOpen)
-        compose.onNodeWithText("Which day was this?").assertExists()
-        assertEquals("on today", repo.today(), vm.ui.value.draft?.date)
+        assertTrue("the entry is open", vm.ui.value.draft != null)
+        assertFalse("and the calendar did not jump up", vm.ui.value.datePickerOpen)
+        assertEquals("today is the day unless said otherwise", repo.today(), vm.ui.value.draft?.date)
+        assertEquals("money out", Type.EXPENSE, vm.ui.value.draft?.type)
 
-        // backing out of it keeps today and leaves the entry being written
-        tapInSheet("Cancel")
-        assertTrue("the entry is still open", vm.ui.value.draft != null)
-        assertEquals(repo.today(), vm.ui.value.draft?.date)
-
-        // and the chip in the sheet still opens it for a second thought
+        // the chip is how you reach the calendar when the cost is being written up late
         tapInSheet("📅  Today")
         assertTrue("the date picker opened", vm.ui.value.datePickerOpen)
     }
@@ -183,7 +180,7 @@ class ScreenTest {
         vm.setPref("me", "Ali")
         waitForLedger()
         start()
-        compose.onNodeWithText("−").performClick()
+        compose.onNodeWithText("PKR OUT").performClick()
         pump()
         tapInSheet("Add expense")
         assertTrue("it said something", vm.ui.value.toast.isNotBlank())

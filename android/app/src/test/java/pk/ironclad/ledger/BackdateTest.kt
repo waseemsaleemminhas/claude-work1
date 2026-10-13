@@ -63,18 +63,18 @@ class BackdateTest {
     fun tearDown() = Repo.resetForTests()
 
     @Test
-    fun `tapping minus asks the day first, already on today`() {
-        vm.startEntry(Type.EXPENSE, askDate = true)
+    fun `a new entry starts on today, with no calendar in the way`() {
+        vm.startEntry(Type.EXPENSE)
         shadowOf(Looper.getMainLooper()).idle()
         val ui = vm.ui.value
-        assertTrue("the calendar is up", ui.datePickerOpen)
-        assertEquals("on today, so the usual case is one tap", repo.today(), ui.draft?.date)
-        assertEquals("and it is still an expense", Type.EXPENSE, ui.draft?.type)
+        assertFalse("nothing pops up", ui.datePickerOpen)
+        assertEquals("today is the day unless said otherwise", repo.today(), ui.draft?.date)
+        assertEquals("and it is an expense", Type.EXPENSE, ui.draft?.type)
     }
 
     @Test
     fun `an earlier day sticks, and goes on the voucher`() = runBlocking {
-        vm.startEntry(Type.EXPENSE, askDate = true)
+        vm.startEntry(Type.EXPENSE)
         val threeDaysBack = LocalDate.parse(repo.today()).minusDays(3).toString()
         vm.setDate(threeDaysBack)
         shadowOf(Looper.getMainLooper()).idle()
@@ -99,9 +99,8 @@ class BackdateTest {
     }
 
     @Test
-    fun `backing out of the calendar keeps today and leaves the keypad open`() {
-        vm.startEntry(Type.INCOME, askDate = true)
-        vm.set { it.copy(datePickerOpen = false) }
+    fun `closing the calendar keeps today and leaves the keypad open`() {
+        vm.startEntry(Type.INCOME)
         shadowOf(Looper.getMainLooper()).idle()
         assertFalse(vm.ui.value.datePickerOpen)
         assertEquals("still today", repo.today(), vm.ui.value.draft?.date)
@@ -110,8 +109,7 @@ class BackdateTest {
 
     @Test
     fun `the date chip in the sheet still opens the calendar for a second thought`() {
-        vm.startEntry(Type.EXPENSE, askDate = true)
-        vm.set { it.copy(datePickerOpen = false) }
+        vm.startEntry(Type.EXPENSE)
         shadowOf(Looper.getMainLooper()).idle()
         compose.setContent {
             LedgerTheme {

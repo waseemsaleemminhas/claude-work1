@@ -25,6 +25,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
@@ -123,7 +126,7 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
     LaunchedEffect(quickEntry.value, state.ready, state.prefs.onboarded) {
         val kind = quickEntry.value
         if (kind != null && state.ready && state.prefs.onboarded) {
-            vm.startEntry(kind, askDate = true)
+            vm.startEntry(kind)
             quickEntry.value = null
         }
     }
@@ -163,21 +166,18 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
 
     val draft = ui.draft
     if (draft != null) {
-        ModalBottomSheet(
-            // Only Add or Discard may close this. A swipe while scrolling the
-            // categories used to throw away everything typed so far.
-            onDismissRequest = { vm.tryClose() },
-            sheetState = rememberModalBottomSheetState(
-                skipPartiallyExpanded = true,
-                confirmValueChange = { value -> value != SheetValue.Hidden },
-            ),
-            containerColor = Ink.bg,
-            contentColor = Ink.text,
-            dragHandle = null,
-        ) {
-            Column(Modifier.fillMaxWidth()) {
+        // A full screen of its own, not a sheet that can be dragged away. The
+        // phone's back button comes here too, so nothing is ever lost to it.
+        BackHandler { vm.tryClose() }
+        Surface(Modifier.fillMaxSize(), color = Ink.bg, contentColor = Ink.text) {
+            Column(
+                Modifier.fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .imePadding(),
+            ) {
+                EntryTitle(vm, draft)
                 if (ui.toast.isNotBlank()) SheetMessage(ui.toast)
-                if (ui.confirmDiscard) DiscardBar(vm)
+                if (ui.confirmDiscard) DiscardBar(vm, draft.editing)
                 when {
                     ui.newCategoryOpen -> NewCategorySheet(vm, state)
                     else -> EntrySheet(vm, state, ui, draft)
@@ -265,12 +265,36 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
 }
 
 /** What the app has to say, where it can actually be seen: inside the sheet. */
+/** Says what is being written, and offers the way out. */
+@Composable
+fun EntryTitle(vm: Vm, draft: Draft) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            when {
+                draft.editing -> "This entry"
+                draft.type == Type.INCOME -> "Money in"
+                draft.type == Type.TRANSFER -> "Move money"
+                else -> "Money out"
+            },
+            fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink.text,
+            modifier = Modifier.weight(1f),
+        )
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).clickable { vm.tryClose() },
+            Alignment.Center,
+        ) { Text("✕", fontSize = 18.sp, color = Ink.muted) }
+    }
+}
+
 /**
  * Shown only when something was typed and the sheet was asked to close. Nothing
  * is thrown away until Discard is tapped here, on purpose.
  */
 @Composable
-fun DiscardBar(vm: Vm) {
+fun DiscardBar(vm: Vm, editing: Boolean = false) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(12.dp))
@@ -278,11 +302,11 @@ fun DiscardBar(vm: Vm) {
             .padding(horizontal = 12.dp, vertical = 12.dp),
     ) {
         Text(
-            "Throw this entry away?",
+            if (editing) "Drop the changes?" else "Throw this entry away?",
             fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink.text,
         )
         Text(
-            "Nothing has been saved yet.",
+            if (editing) "The entry itself stays as it was." else "Nothing has been saved yet.",
             fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(top = 2.dp),
         )
         Row(
@@ -300,7 +324,7 @@ fun DiscardBar(vm: Vm) {
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = Ink.bad),
                 shape = RoundedCornerShape(10.dp),
-            ) { Text("Discard", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+            ) { Text(if (editing) "Drop them" else "Discard", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
         }
     }
 }
@@ -367,13 +391,14 @@ fun Dock(vm: Vm, ui: Ui) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
-            Modifier.size(58.dp).clip(CircleShape).background(Ink.bad)
-                .clickable { vm.startEntry(Type.EXPENSE, askDate = true) },
+            Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Ink.bad)
+                .clickable { vm.startEntry(Type.EXPENSE) }
+                .padding(vertical = 14.dp),
             Alignment.Center,
-        ) { Text("−", fontSize = 30.sp, color = Color.White) }
+        ) { Text("PKR OUT", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
 
         Box(
-            Modifier.weight(1f).clip(CircleShape).background(Ink.card)
+            Modifier.clip(CircleShape).background(Ink.card)
                 .clickable {
                     vm.go(
                         when (ui.screen) {
@@ -397,10 +422,11 @@ fun Dock(vm: Vm, ui: Ui) {
         }
 
         Box(
-            Modifier.size(58.dp).clip(CircleShape).background(Ink.good)
-                .clickable { vm.startEntry(Type.INCOME, askDate = true) },
+            Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Ink.good)
+                .clickable { vm.startEntry(Type.INCOME) }
+                .padding(vertical = 14.dp),
             Alignment.Center,
-        ) { Text("+", fontSize = 30.sp, color = Color.White) }
+        ) { Text("PKR IN", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
     }
 }
 

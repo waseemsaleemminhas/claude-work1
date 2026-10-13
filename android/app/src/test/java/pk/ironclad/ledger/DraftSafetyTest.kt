@@ -54,8 +54,7 @@ class DraftSafetyTest {
 
     /** An entry mid-flight: a category, some digits, a vendor. */
     private fun halfWritten() {
-        vm.startEntry(Type.EXPENSE, askDate = true)
-        vm.set { it.copy(datePickerOpen = false) }
+        vm.startEntry(Type.EXPENSE)
         vm.editDraft { it.copy(line = Line(category = "Headsets"), vendor = "Shell Gulberg") }
         listOf("1", "8", "6", "0").forEach { vm.key(it) }
         shadowOf(Looper.getMainLooper()).idle()
@@ -115,8 +114,7 @@ class DraftSafetyTest {
 
     @Test
     fun `an entry nobody has touched closes without a question`() {
-        vm.startEntry(Type.EXPENSE, askDate = true)
-        vm.set { it.copy(datePickerOpen = false) }
+        vm.startEntry(Type.EXPENSE)
         vm.tryClose()
         shadowOf(Looper.getMainLooper()).idle()
 
@@ -153,6 +151,86 @@ class DraftSafetyTest {
         pump()
         assertFalse("and fold away again", vm.ui.value.draft!!.more)
         assertEquals("with what was typed still there", "Shell Gulberg", vm.ui.value.draft!!.vendor)
+    }
+
+    @Test
+    fun `an entry opened for a look closes on the back button, with no question`() = kotlinx.coroutines.runBlocking {
+        settle()
+        repo.save(
+            pk.ironclad.ledger.data.Entry(
+                id = "", date = repo.today(), type = Type.EXPENSE, account = "Petty cash",
+                lines = listOf(Line(category = "Headsets", amountMinor = 125000)),
+            ),
+        )
+        repeat(200) {
+            shadowOf(Looper.getMainLooper()).idle()
+            if (repo.state.value.entries.isNotEmpty()) return@repeat
+            Thread.sleep(25)
+        }
+        val saved = repo.state.value.entries.first()
+
+        vm.openEntry(saved)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNotNull("it opened", vm.ui.value.draft)
+
+        // this is what hung: nothing was changed, so back must simply close it
+        vm.tryClose()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull("closed, no question asked", vm.ui.value.draft)
+        assertFalse(vm.ui.value.confirmDiscard)
+        assertEquals("and the entry is untouched", 1, repo.state.value.entries.size)
+    }
+
+    @Test
+    fun `changing something in an opened entry does ask before dropping it`() = kotlinx.coroutines.runBlocking {
+        settle()
+        repo.save(
+            pk.ironclad.ledger.data.Entry(
+                id = "", date = repo.today(), type = Type.EXPENSE, account = "Petty cash",
+                lines = listOf(Line(category = "Headsets", amountMinor = 125000)),
+            ),
+        )
+        repeat(200) {
+            shadowOf(Looper.getMainLooper()).idle()
+            if (repo.state.value.entries.isNotEmpty()) return@repeat
+            Thread.sleep(25)
+        }
+        vm.openEntry(repo.state.value.entries.first())
+        vm.editDraft { it.copy(note = "took a rickshaw") }
+        vm.tryClose()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertTrue("a real change is worth asking about", vm.ui.value.confirmDiscard)
+        assertNotNull(vm.ui.value.draft)
+        assertEquals("took a rickshaw", vm.ui.value.draft?.note)
+    }
+
+    @Test
+    fun `typing in the search box leaves only what matches`() {
+        settle()
+        vm.startEntry(Type.EXPENSE)
+        vm.searchCategories("wate")
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("wate", vm.ui.value.catQuery)
+
+        val matching = repo.state.value.categoriesOf(Type.EXPENSE)
+            .filter { it.name.contains("wate", ignoreCase = true) }
+        assertTrue("there is a water category to find", matching.isNotEmpty())
+        assertTrue("and it is what the search would show",
+            matching.all { it.name.lowercase().contains("wate") })
+
+        vm.searchCategories("")
+        assertEquals("clearing it brings them all back", "", vm.ui.value.catQuery)
+    }
+
+    @Test
+    fun `the search box is cleared when the entry closes`() {
+        settle()
+        vm.startEntry(Type.EXPENSE)
+        vm.searchCategories("water")
+        vm.tryClose()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("the next entry starts fresh", "", vm.ui.value.catQuery)
     }
 
     @Test

@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -120,14 +121,50 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
                 }
             }
         } else {
-            val categories = state.categoriesOf(draft.type).let { list ->
+            val all = state.categoriesOf(draft.type).let { list ->
                 if (line.category.isNotBlank() && list.none { it.name == line.category }) {
                     listOfNotNull(state.category(line.category)) + list
                 } else list
             }
+            // Forty-odd categories is a lot to hunt through with a thumb. Type
+            // three letters and only what matches is left: "wate" finds Water.
+            val query = ui.catQuery.trim()
+            val categories = if (query.isBlank()) all else {
+                val hit = all.filter { it.name.contains(query, ignoreCase = true) }
+                val near = all.filter {
+                    !hit.contains(it) && it.group.contains(query, ignoreCase = true)
+                }
+                hit + near
+            }
+            OutlinedTextField(
+                value = ui.catQuery,
+                onValueChange = { vm.searchCategories(it) },
+                placeholder = { Text("Search categories", fontSize = 13.sp, color = Ink.muted) },
+                leadingIcon = { Text("🔍", fontSize = 14.sp) },
+                trailingIcon = {
+                    if (ui.catQuery.isNotEmpty()) {
+                        Box(
+                            Modifier.size(36.dp).clickable { vm.searchCategories("") },
+                            Alignment.Center,
+                        ) { Text("✕", fontSize = 14.sp, color = Ink.muted) }
+                    }
+                },
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                shape = RoundedCornerShape(12.dp),
+            )
+            if (query.isNotBlank() && categories.isEmpty()) {
+                Text(
+                    "Nothing matches \"" + query + "\". Tap ＋ New to add it.",
+                    fontSize = 12.sp, color = Ink.muted,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5),
-                modifier = Modifier.fillMaxWidth().heightIn(max = 168.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .heightIn(max = if (query.isBlank()) 168.dp else 228.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -137,16 +174,30 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (line.category == category.name) Ink.card2 else Ink.card)
                             .border(
-                                BorderStroke(1.dp, if (line.category == category.name) Ink.brand else Ink.line),
+                                BorderStroke(
+                                    1.dp,
+                                    when {
+                                        line.category == category.name -> Ink.brand
+                                        query.isNotBlank() &&
+                                            category.name.contains(query, ignoreCase = true) -> Ink.good
+                                        else -> Ink.line
+                                    },
+                                ),
                                 RoundedCornerShape(12.dp),
                             )
                             .clickable { vm.pickCategory(category.name) }
                             .padding(vertical = 8.dp, horizontal = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        val matches = query.isNotBlank() &&
+                            category.name.contains(query, ignoreCase = true)
                         Text(category.icon, fontSize = 18.sp)
-                        Text(category.name, fontSize = 9.sp, color = Ink.muted, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                        Text(
+                            category.name, fontSize = 9.sp, maxLines = 1,
+                            color = if (matches) Ink.text else Ink.muted,
+                            fontWeight = if (matches) FontWeight.Bold else FontWeight.Normal,
+                            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                        )
                     }
                 }
                 item {
