@@ -158,13 +158,22 @@ class ScreenTest {
     }
 
     @Test
-    fun `the entry sheet shows the date and opens a picker`() {
+    fun `tapping minus asks the day first, with the keypad waiting behind it`() {
         vm.setPref("me", "Ali")
         waitForLedger()
         start()
         compose.onNodeWithText("−").performClick()
         pump()
-        compose.onNodeWithText("Today", substring = true).assertExists()
+        assertTrue("the calendar came up by itself", vm.ui.value.datePickerOpen)
+        compose.onNodeWithText("Which day was this?").assertExists()
+        assertEquals("on today", repo.today(), vm.ui.value.draft?.date)
+
+        // backing out of it keeps today and leaves the entry being written
+        tapInSheet("Cancel")
+        assertTrue("the entry is still open", vm.ui.value.draft != null)
+        assertEquals(repo.today(), vm.ui.value.draft?.date)
+
+        // and the chip in the sheet still opens it for a second thought
         tapInSheet("📅  Today")
         assertTrue("the date picker opened", vm.ui.value.datePickerOpen)
     }

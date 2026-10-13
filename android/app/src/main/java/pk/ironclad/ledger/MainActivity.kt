@@ -32,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -63,6 +64,7 @@ import pk.ironclad.ledger.ui.GhostButton
 import pk.ironclad.ledger.ui.HomeScreen
 import pk.ironclad.ledger.ui.Ink
 import pk.ironclad.ledger.ui.LedgerTheme
+import pk.ironclad.ledger.ui.dayOffered
 import pk.ironclad.ledger.ui.ListRow
 import pk.ironclad.ledger.ui.OnboardScreen
 import pk.ironclad.ledger.ui.RecordsScreen
@@ -118,7 +120,7 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
     LaunchedEffect(quickEntry.value, state.ready, state.prefs.onboarded) {
         val kind = quickEntry.value
         if (kind != null && state.ready && state.prefs.onboarded) {
-            vm.startEntry(kind)
+            vm.startEntry(kind, askDate = true)
             quickEntry.value = null
         }
     }
@@ -184,6 +186,11 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
             initialSelectedDateMillis = runCatching {
                 LocalDate.parse(draft.date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
             }.getOrNull(),
+            yearRange = (LocalDate.now().year - 3)..LocalDate.now().year,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = dayOffered(utcTimeMillis)
+                override fun isSelectableYear(year: Int) = year <= LocalDate.now().year
+            },
         )
         DatePickerDialog(
             onDismissRequest = { vm.set { it.copy(datePickerOpen = false) } },
@@ -204,7 +211,28 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
             },
             colors = DatePickerDefaults.colors(containerColor = Ink.card),
         ) {
-            DatePicker(state = picker, showModeToggle = false)
+            DatePicker(
+                state = picker,
+                showModeToggle = false,
+                title = {
+                    Text(
+                        "Which day was this?",
+                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink.text,
+                        modifier = Modifier.padding(start = 24.dp, top = 16.dp),
+                    )
+                },
+                headline = {
+                    Text(
+                        picker.selectedDateMillis?.let {
+                            pk.ironclad.ledger.ui.dateLabel(
+                                Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString(),
+                            )
+                        } ?: "Pick a day",
+                        fontSize = 24.sp, color = Ink.text,
+                        modifier = Modifier.padding(start = 24.dp, bottom = 10.dp),
+                    )
+                },
+            )
         }
     }
 
@@ -290,7 +318,7 @@ fun Dock(vm: Vm, ui: Ui) {
     ) {
         Box(
             Modifier.size(58.dp).clip(CircleShape).background(Ink.bad)
-                .clickable { vm.startEntry(Type.EXPENSE) },
+                .clickable { vm.startEntry(Type.EXPENSE, askDate = true) },
             Alignment.Center,
         ) { Text("−", fontSize = 30.sp, color = Color.White) }
 
@@ -320,7 +348,7 @@ fun Dock(vm: Vm, ui: Ui) {
 
         Box(
             Modifier.size(58.dp).clip(CircleShape).background(Ink.good)
-                .clickable { vm.startEntry(Type.INCOME) },
+                .clickable { vm.startEntry(Type.INCOME, askDate = true) },
             Alignment.Center,
         ) { Text("+", fontSize = 30.sp, color = Color.White) }
     }

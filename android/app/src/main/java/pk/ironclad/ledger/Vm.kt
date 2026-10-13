@@ -175,7 +175,12 @@ class Vm(app: Application) : AndroidViewModel(app) {
 
     // ---- putting something in
 
-    fun startEntry(type: String = Type.EXPENSE, category: String = "") {
+    /**
+     * [askDate] opens the calendar straight away, on today. Tapping − or + is
+     * often somebody writing up yesterday's cost, so the day comes first and
+     * the keypad is waiting behind it. Cancel simply keeps today.
+     */
+    fun startEntry(type: String = Type.EXPENSE, category: String = "", askDate: Boolean = false) {
         val state = ledger.value
         val account = state.prefs.myAccount.takeIf { name -> state.liveAccounts.any { it.name == name } }
             ?: state.liveAccounts.firstOrNull()?.name.orEmpty()
@@ -188,6 +193,7 @@ class Vm(app: Application) : AndroidViewModel(app) {
                     toAccount = if (type == Type.TRANSFER) state.liveAccounts.firstOrNull { a -> a.name != account }?.name.orEmpty() else "",
                     line = Line(category = category),
                 ),
+                datePickerOpen = askDate,
             )
         }
     }

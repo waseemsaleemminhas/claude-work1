@@ -221,6 +221,15 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
     }
 }
 
+/**
+ * Which days the calendar lets you tap. The sheet turns down anything past
+ * tomorrow, so the app does not offer it: better a day that cannot be chosen
+ * than a voucher turned down at sync, after the person has gone home. Back the
+ * other way there is no limit — last month's bill is a real thing to write up.
+ */
+fun dayOffered(utcMillis: Long, today: LocalDate = LocalDate.now()): Boolean =
+    utcMillis <= today.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+
 /** "Today", "Yesterday", or a plain date. */
 fun dateLabel(iso: String): String = runCatching {
     val date = LocalDate.parse(iso)
