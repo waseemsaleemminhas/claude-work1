@@ -94,7 +94,7 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
                     }
                 }
                 SectionLabel(
-                    Period.dayLabel(LocalDate.parse(date), today),
+                    runCatching { Period.dayLabel(LocalDate.parse(date), today) }.getOrDefault(date),
                     if (net != 0L) (if (net > 0) "+" else "") + state.money(net) else "",
                 )
             }
