@@ -42,9 +42,18 @@
  *     code, and installs the nightly rebuild.
  *  4. Deploy -> New deployment -> type "Web app"
  *       Execute as:      Me
- *       Who has access:  Anyone with a Google account
+ *       Who has access:  Anyone with a Google account   <-- if the team only uses
+ *                                                           the web page
+ *                        Anyone                         <-- REQUIRED if the team
+ *                                                           uses the Android app
+ *     The Android app signs in with its access code, not with a Google account, so
+ *     it cannot reach a deployment set to "Anyone with a Google account". With
+ *     "Anyone", the link plus a code is what gets someone in: give each person
+ *     their own code, keep the link off WhatsApp groups, and change a code the day
+ *     somebody leaves.
  *     Deploy, copy the URL, send it to the team. On the phone: open it in Chrome
- *     and use "Add to Home screen".
+ *     and use "Add to Home screen", or install the app and paste the link into
+ *     Settings.
  *  5. "Ledger" menu -> "People and access codes" to add the team. Anyone opening
  *     the link with a Google account that is on the People tab is let straight in;
  *     everyone else types their code.
@@ -543,8 +552,9 @@ function canEdit_(person, entry) {
 
 /**
  * Hands out `amountMinor` paisa over the given weights so the parts add up to the
- * whole, exactly. Largest remainder, and ties broken by campaign id so that two
- * phones working offline on the same entry always arrive at the same numbers.
+ * whole, exactly. Largest remainder, and ties broken by campaign NAME — the key the
+ * data itself carries — so the sheet, the page and the Android app all land on the
+ * same paisa when two of them work out the same entry.
  */
 function splitExact_(amountMinor, weights) {
   const useful = weights.filter(w => Number(w.weight) > 0);
@@ -572,9 +582,9 @@ function splitExact_(amountMinor, weights) {
 // campaigns are a place to put company spending, not somewhere rent lands.
 function ruleWeights_(rule, campaigns) {
   const live = campaigns.filter(c => c.status === 'Active' && c.kind === 'Client');
-  if (rule.method === 'Seats') return live.map(c => ({ campaignId: c.id, weight: c.seats }));
-  if (rule.method === 'Agents') return live.map(c => ({ campaignId: c.id, weight: c.agents }));
-  return live.map(c => ({ campaignId: c.id, weight: 1 }));
+  if (rule.method === 'Seats') return live.map(c => ({ campaignId: c.name, weight: c.seats }));
+  if (rule.method === 'Agents') return live.map(c => ({ campaignId: c.name, weight: c.agents }));
+  return live.map(c => ({ campaignId: c.name, weight: 1 }));
 }
 
 /**
@@ -597,7 +607,7 @@ function allocateLine_(line, ctx) {
     if (!campaign) return { allocations: [], basis: 'direct' };
     return {
       basis: 'direct',
-      allocations: [{ campaignId: campaign.id, bp: 10000, amountMinor: amount }],
+      allocations: [{ campaignId: campaign.name, bp: 10000, amountMinor: amount }],
     };
   }
 
@@ -613,7 +623,7 @@ function allocateLine_(line, ctx) {
     }
     return {
       basis: 'direct',
-      allocations: splitExact_(amount, wanted.map(a => ({ campaignId: a.campaign.id, weight: a.bp }))),
+      allocations: splitExact_(amount, wanted.map(a => ({ campaignId: a.campaign.name, weight: a.bp }))),
     };
   }
 
@@ -625,7 +635,29 @@ function allocateLine_(line, ctx) {
 
 // ---- Checking an entry before it is written ------------------------------
 
-function prepareEntry_(raw, ctx) {
+// The splits the phone sent, if they are whole and name campaigns we know.
+function frozenAllocations_(raw, amount, ctx) {
+  const sent = raw && raw.allocations;
+  if (!sent || !sent.length) return null;
+  let sum = 0;
+  const kept = [];
+  for (let i = 0; i < sent.length; i++) {
+    const campaign = campOf_(ctx, sent[i].campaign || sent[i].campaignId);
+    const share = Math.round(Number(sent[i].amountMinor) || 0);
+    if (!campaign || !(share > 0)) return null;
+    sum += share;
+    kept.push({ campaignId: campaign.name, bp: Math.round(Number(sent[i].bp) || 0), amountMinor: share });
+  }
+  if (sum !== amount) return null;
+  return {
+    allocations: kept,
+    basis: raw.basis === 'apportioned' ? 'apportioned' : 'direct',
+    ruleId: null,
+    ruleVersion: raw.allocationRuleVersion || null,
+  };
+}
+
+function prepareEntry_(raw, ctx, trustSettled) {
   const req = raw || {};
   const type = ENTRY_TYPES.indexOf(txt_(req.type, 20)) === -1 ? '' : txt_(req.type, 20);
   if (!type) return { error: 'Say whether this is an expense, income or a transfer.' };
@@ -678,7 +710,12 @@ function prepareEntry_(raw, ctx) {
     }
 
     const centre = ctx.centreByName[txt_(raw.costCentre, 80).toLowerCase()];
-    const settled = allocateLine_({
+
+    // A phone works the split out when the entry is made and freezes it. On the way
+    // up we keep those numbers rather than working them out again, or a voucher
+    // entered last month would quietly re-split itself on today's seat counts.
+    const frozen = trustSettled ? frozenAllocations_(raw, amount, ctx) : null;
+    const settled = frozen || allocateLine_({
       amountMinor: amount,
       allocationMethod: ['direct', 'split', 'rule'].indexOf(raw.allocationMethod) === -1 ? 'direct' : raw.allocationMethod,
       campaignId: raw.campaign || raw.campaignId,
@@ -702,12 +739,14 @@ function prepareEntry_(raw, ctx) {
       unitPriceMinor: unit,
       amountMinor: amount,
       costCentre: centre ? centre.name : (category.costCentre || ''),
-      allocationMethod: settled.ruleId ? 'rule' : (settled.allocations.length > 1 ? 'split' : 'direct'),
-      allocationRule: settled.ruleId ? (ctx.ruleById[settled.ruleId] || {}).name || '' : '',
+      allocationMethod: frozen ? txt_(raw.allocationMethod, 10) || 'direct'
+        : (settled.ruleId ? 'rule' : (settled.allocations.length > 1 ? 'split' : 'direct')),
+      allocationRule: frozen ? txt_(raw.allocationRule, 60)
+        : (settled.ruleId ? (ctx.ruleById[settled.ruleId] || {}).name || '' : ''),
       allocationRuleVersion: settled.ruleVersion || null,
       basis: settled.basis,
       allocations: settled.allocations.map(a => ({
-        campaign: ctx.campaignById[a.campaignId].name,
+        campaign: a.campaignId,
         bp: a.bp,
         amountMinor: a.amountMinor,
       })),
@@ -883,6 +922,8 @@ function entries_(ss, tz) {
       note: txt_(t.get(r, 'Note'), 200),
       enteredBy: txt_(t.get(r, 'Entered By'), 120),
       at: t.get(r, 'Entered At') instanceof Date ? t.get(r, 'Entered At').getTime() : 0,
+      updatedAt: t.get(r, 'Changed At') instanceof Date ? t.get(r, 'Changed At').getTime()
+        : (t.get(r, 'Entered At') instanceof Date ? t.get(r, 'Entered At').getTime() : 0),
       lines: lines,
     };
   }).filter(e => e);
@@ -3214,4 +3255,106 @@ document.addEventListener('keydown', function (ev) {
 
 window.addEventListener('load', start);
 `;
+}
+
+// ---- What the Android app talks to ---------------------------------------
+
+/**
+ * One round trip: the phone sends whatever it has not sent yet, and gets back
+ * whatever changed since it last asked. Nothing here is required for the phone to
+ * work — it is a ledger on its own, and this is how it catches up with the others.
+ *
+ * POST {op:'sync', code, device, since, entries:[...]}
+ */
+function doPost(e) {
+  let req = null;
+  try {
+    req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return jsonOut_({ ok: false, message: 'That was not something I could read.' });
+  }
+  if (!req || req.op !== 'sync') return jsonOut_({ ok: false, message: 'Unknown request.' });
+  return jsonOut_(syncLedger_(req));
+}
+
+function jsonOut_(value) {
+  return ContentService.createTextOutput(JSON.stringify(value))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function syncLedger_(req) {
+  return guarded_(req, function (ss, person) {
+    const ctx = context_(ss);
+    const t = lgTable_(ss, LG_ENTRIES);
+    const accepted = [];
+    const rejected = {};
+
+    (req.entries || []).slice(0, 200).forEach(function (sent) {
+      const id = txt_(sent && sent.id, 40);
+      if (!id) return;
+      const rowNumber = lgRowOf_(t, id);
+      const old = rowNumber ? t.rows[rowNumber - 2] : null;
+      const owner = old ? txt_(t.get(old, 'Entered By'), 120) : '';
+      if (old && !canEdit_(person, { enteredBy: owner })) {
+        rejected[id] = 'That entry belongs to ' + owner + '.';
+        return;
+      }
+
+      // a phone can void an entry while it is offline
+      if (txt_(sent.status, 20) === ST_VOID) {
+        if (!rowNumber) { rejected[id] = 'No such entry here.'; return; }
+        t.sh.getRange(rowNumber, t.col('Status')).setValue(ST_VOID);
+        t.sh.getRange(rowNumber, t.col('Voided By')).setValue(person.email || person.name);
+        t.sh.getRange(rowNumber, t.col('Voided At')).setValue(new Date());
+        accepted.push(id);
+        return;
+      }
+
+      const prepared = prepareEntry_(sent, ctx, true);
+      if (prepared.error) { rejected[id] = prepared.error; return; }
+      const value = prepared.value;
+      const enteredBy = owner || txt_(sent.enteredBy, 120) || person.email || person.name;
+      const enteredAt = old && t.get(old, 'Entered At') instanceof Date
+        ? t.get(old, 'Entered At')
+        : (Number(sent.at) ? new Date(Number(sent.at)) : new Date());
+      const values = entryRow_(value, id, enteredBy, enteredAt, old ? new Date() : '', '', '');
+      if (rowNumber) lgWrite_(t, rowNumber, values);
+      else {
+        const at = lgAppend_(t, values);
+        t.sh.getRange(at, t.col('Date')).setNumberFormat('yyyy-mm-dd');
+        t.sh.getRange(at, t.col('Total')).setNumberFormat('#,##0.00');
+      }
+      if (value.vendor) touchVendor_(ss, value.vendor);
+      accepted.push(id);
+    });
+
+    if (accepted.length) {
+      note_(ss, person, 'Synced ' + accepted.length + ' entries from ' + txt_(req.device, 60) +
+        (Object.keys(rejected).length ? ' (' + Object.keys(rejected).length + ' turned down)' : ''));
+    }
+
+    // and back down: everything that changed since the phone last asked
+    const since = Number(req.since) || 0;
+    const mine = {};
+    accepted.forEach(function (id) { mine[id] = true; });
+    const changed = entries_(ss, ctx.tz)
+      .filter(function (entry) { return !mine[entry.id] && entryChangedAt_(entry) > since; })
+      .slice(0, 500);
+
+    return {
+      ok: true,
+      now: Date.now(),
+      accepted: accepted,
+      rejected: rejected,
+      entries: changed,
+      campaigns: ctx.campaignList,
+      categories: ctx.categoryList,
+      accounts: ctx.accountList,
+      rules: ctx.ruleList,
+    };
+  });
+}
+
+function entryChangedAt_(entry) {
+  return Math.max(Number(entry.updatedAt) || 0, Number(entry.at) || 0);
 }
