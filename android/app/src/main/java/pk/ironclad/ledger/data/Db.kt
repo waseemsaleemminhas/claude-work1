@@ -163,6 +163,10 @@ interface LedgerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMeta(row: MetaRow)
 
     @Query("SELECT COUNT(*) FROM categories") suspend fun categoryCount(): Int
+
+    /** What has gone out on one day — the figure the home-screen widget shows. */
+    @Query("SELECT SUM(totalMinor) FROM entries WHERE type = 'Expense' AND status != 'Void' AND date = :date")
+    suspend fun spentOn(date: String): Long?
     @Query("SELECT value FROM meta WHERE key = :key") suspend fun meta(key: String): String?
 }
 

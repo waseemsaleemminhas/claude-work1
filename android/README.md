@@ -18,11 +18,15 @@ network. Nobody ever waits for a spinner to record a cost.
 - **Works offline, syncs when it can.** Room on the phone is the source of truth.
   WorkManager pushes what is unsent and pulls what changed, whenever there is a
   network. With no server link set at all, it is simply a ledger on that phone.
+- **A home-screen widget.** One row: what has gone out today, and two buttons that
+  drop straight into the keypad — red for an expense, green for a payment in.
+  Tapping the figure opens the book. It redraws itself after every entry, every
+  void and every sync.
 - Records, money held (including cash somebody is carrying), voiding rather than
   deleting, and adding a category mid-entry.
 
-Not built yet: the home-screen widget, editing accounts from the app (do that on
-the sheet for now), and receipt photos.
+Not built yet: editing accounts from the app (do that on the sheet for now), and
+receipt photos.
 
 The launcher mark is a placeholder drawn for this build — send the real Ironclad
 Tech logo as a PNG or SVG and it drops straight in.
@@ -88,6 +92,7 @@ data model does not change.
     data/Repo.kt        every read and write, with no network in the way
     data/Sync.kt        push what is unsent, pull what changed
     Vm.kt               screen state, the keypad calculator, the voucher being filled in
+    QuickEntryWidget.kt the home-screen widget (RemoteViews, so it works from API 24)
     ui/                 Compose screens
 
 Amounts are whole paisa (`Long`) everywhere and only become words at the edge.
@@ -102,6 +107,9 @@ sheet does, so the two sides can be reconciled by eye.
   tap-tap flow, the calculator keypad, back-dating an entry, voiding, editing.
 - `ScreenTest` / `SheetTouchTest` — the screens drawn and tapped, including the
   home screen with spending on it (which is where the first crash lived).
+- `WidgetTest` — the widget's own RemoteViews: today's figure (yesterday's
+  spending and money coming in left out of it), a voided entry dropping out, and
+  its buttons landing in the right kind of entry.
 - `SyncContractTest` — parses a reply captured from the real Apps Script code, so
   the two halves are checked against what the server actually sends.
 

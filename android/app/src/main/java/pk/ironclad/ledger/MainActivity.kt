@@ -1,5 +1,6 @@
 package pk.ironclad.ledger
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,6 +36,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -71,16 +73,34 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 class MainActivity : ComponentActivity() {
+
+    /** What the home-screen widget asked for, if the app was opened from it. */
+    private val quickEntry = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { LedgerTheme { App() } }
+        quickEntry.value = askedFor(intent)
+        setContent { LedgerTheme { App(quickEntry = quickEntry) } }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        quickEntry.value = askedFor(intent)
+    }
+
+    private fun askedFor(intent: Intent?): String? =
+        if (intent?.action == QuickEntryWidget.QUICK_ENTRY) {
+            intent.getStringExtra(QuickEntryWidget.EXTRA_KIND)
+        } else {
+            null
+        }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun App(vm: Vm = viewModel()) {
+fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mutableStateOf(null) }) {
     val context = LocalContext.current
     var crashReport by remember { mutableStateOf(Crash.last(context)) }
     if (crashReport != null) {
@@ -93,6 +113,15 @@ fun App(vm: Vm = viewModel()) {
 
     val state by vm.ledger.collectAsState()
     val ui by vm.ui.collectAsState()
+
+    // Straight into the keypad when the widget asked for it, once the book is open.
+    LaunchedEffect(quickEntry.value, state.ready, state.prefs.onboarded) {
+        val kind = quickEntry.value
+        if (kind != null && state.ready && state.prefs.onboarded) {
+            vm.startEntry(kind)
+            quickEntry.value = null
+        }
+    }
 
     LaunchedEffect(ui.toast) {
         if (ui.toast.isNotBlank()) {

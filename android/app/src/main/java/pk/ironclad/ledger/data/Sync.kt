@@ -75,6 +75,7 @@ object Sync {
         }.onFailure { return@withContext "Could not file what came back: " + (it.message ?: "unknown") }
         if (answer.accepted.isNotEmpty()) repo.markSynced(answer.accepted)
         repo.setPref("lastSync", answer.now.toString())
+        pk.ironclad.ledger.QuickEntryWidget.refresh(context)
 
         val pushed = answer.accepted.size
         val pulled = answer.entries.size

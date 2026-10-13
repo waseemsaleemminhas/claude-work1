@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Quick entry from the home screen: what has gone out today, and the two buttons
+  that drop straight into the keypad. Kept to one row so it sits on a crowded
+  home screen without taking it over.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:id="@+id/widget_open"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_spent_today"
+            android:textColor="#8B98A9"
+            android:textSize="11sp"
+            android:maxLines="1" />
+
+        <TextView
+            android:id="@+id/widget_amount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_dash"
+            android:textColor="#EEF2F7"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_expense"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:layout_marginEnd="10dp"
+        android:background="@drawable/widget_button_spend"
+        android:contentDescription="@string/widget_add_expense"
+        android:gravity="center"
+        android:text="@string/widget_minus"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp" />
+
+    <TextView
+        android:id="@+id/widget_income"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:background="@drawable/widget_button_earn"
+        android:contentDescription="@string/widget_add_payment"
+        android:gravity="center"
+        android:text="@string/widget_plus"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp" />
+</LinearLayout>

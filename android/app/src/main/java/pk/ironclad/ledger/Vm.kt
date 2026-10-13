@@ -253,6 +253,7 @@ class Vm(app: Application) : AndroidViewModel(app) {
             val saved = repo.save(entry)
             closeEntry()
             toast(if (draft.editing) "Saved." else "Added " + state.money(saved.totalMinor))
+            QuickEntryWidget.refresh(getApplication())
             Sync.nudge(getApplication())
         }
     }
@@ -265,6 +266,7 @@ class Vm(app: Application) : AndroidViewModel(app) {
             repo.void(draft.id)
             closeEntry()
             toast("Voided. It stays in the book, marked void.")
+            QuickEntryWidget.refresh(getApplication())
             Sync.nudge(getApplication())
         }
     }

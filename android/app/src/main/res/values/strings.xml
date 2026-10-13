@@ -1,4 +1,11 @@
 <resources>
     <string name="app_name">Ironclad Tech Ledger</string>
     <string name="website">www.getironcladtech.com</string>
+    <string name="widget_description">Today\'s spending, and two taps to put something in.</string>
+    <string name="widget_spent_today">Spent today</string>
+    <string name="widget_add_expense">Add an expense</string>
+    <string name="widget_add_payment">Add a payment in</string>
+    <string name="widget_minus">−</string>
+    <string name="widget_plus">+</string>
+    <string name="widget_dash">—</string>
 </resources>
