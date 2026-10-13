@@ -15,7 +15,6 @@ import java.util.UUID
 
 data class Prefs(
     val me: String = "",
-    val myCampaign: String = "",
     val myAccount: String = "",
     val currency: String = "Rs",
     val decimals: Int = 0,
@@ -30,24 +29,18 @@ data class Prefs(
 data class LedgerState(
     val ready: Boolean = false,
     val entries: List<Entry> = emptyList(),
-    val campaigns: List<Campaign> = emptyList(),
     val categories: List<Category> = emptyList(),
     val accounts: List<Account> = emptyList(),
-    val rules: List<Rule> = emptyList(),
     val prefs: Prefs = Prefs(),
 ) {
-    val liveCampaigns: List<Campaign> get() = campaigns.filter { it.live }
     val liveAccounts: List<Account> get() = accounts.filter { !it.archived }
 
     fun categoriesOf(kind: String, withHidden: Boolean = false): List<Category> =
         categories.filter { it.kind == kind && it.mergedInto.isBlank() && (withHidden || !it.archived) }
 
     fun category(name: String): Category? = categories.firstOrNull { it.name == name }
-    fun campaign(name: String): Campaign? = campaigns.firstOrNull { it.name == name }
     fun account(name: String): Account? = accounts.firstOrNull { it.name == name }
 
-    val drafts: List<Entry> get() = entries.filter { it.status == Status.DRAFT && it.type != Type.TRANSFER }
-    val draftMinor: Long get() = drafts.sumOf { it.totalMinor }
     val totalHeldMinor: Long get() = liveAccounts.sumOf { it.balanceMinor }
 
     fun money(minor: Long): String = Money.format(minor, prefs.currency, prefs.decimals)
@@ -66,25 +59,18 @@ class Repo private constructor(context: Context) {
 
     val state: StateFlow<LedgerState> = combine(
         dao.watchEntries().map { rows -> rows.map { it.toEntry() } },
-        dao.watchCampaigns().map { rows -> rows.map { it.toCampaign() } },
         dao.watchCategories().map { rows -> rows.map { it.toCategory() } },
         dao.watchAccounts().map { rows -> rows.map { it.toAccount() } },
-        dao.watchRules().map { rows -> rows.map { it.toRule() } },
-    ) { entries, campaigns, categories, accounts, rules ->
+        dao.watchMeta(),
+    ) { entries, categories, accounts, meta ->
+        val map = meta.associate { it.key to it.value }
         LedgerState(
             ready = categories.isNotEmpty(),
             entries = entries,
-            campaigns = campaigns,
             categories = categories,
             accounts = withBalances(accounts, entries),
-            rules = rules,
-        )
-    }.combine(dao.watchMeta()) { partial, meta ->
-        val map = meta.associate { it.key to it.value }
-        partial.copy(
             prefs = Prefs(
                 me = map["me"].orEmpty(),
-                myCampaign = map["myCampaign"].orEmpty(),
                 myAccount = map["myAccount"].orEmpty(),
                 currency = map["currency"] ?: "Rs",
                 decimals = map["decimals"]?.toIntOrNull() ?: 0,
@@ -102,49 +88,35 @@ class Repo private constructor(context: Context) {
     private suspend fun seedIfEmpty() {
         if (dao.categoryCount() > 0) return
         dao.putCategories(Seed.categories.map { CategoryRow.of(it) })
-        dao.putRules(Seed.rules.map { RuleRow.of(it) })
         dao.putAccounts(Seed.accounts.map { AccountRow.of(it) })
-        dao.putCampaigns(Seed.campaigns.map { CampaignRow.of(it) })
     }
 
     suspend fun setPref(key: String, value: String) = dao.putMeta(MetaRow(key, value))
 
     fun today(): String = LocalDate.now().toString()
 
-    /**
-     * Writes a voucher. The campaign splits are worked out here and kept with it,
-     * so a report of last month never changes when seat counts do. A line that
-     * cannot be settled makes the whole voucher a draft: the money still moved,
-     * and the entry waits in a queue that wants to be empty.
-     */
+    /** Writes a voucher. One book for the whole company: a line is a category and an amount. */
     suspend fun save(entry: Entry): Entry {
         val now = System.currentTimeMillis()
         val snapshot = state.value
         val existing = entry.id.takeIf { it.isNotBlank() }?.let { dao.entry(it) }
 
-        val settled = if (entry.type == Type.TRANSFER) emptyList() else entry.lines.mapIndexed { i, line ->
-            Allocator.settle(line.copy(no = i + 1), snapshot.campaigns, snapshot.rules)
-        }
-        val total = if (entry.type == Type.TRANSFER) entry.totalMinor else settled.sumOf { it.amountMinor }
-        val unsettled = settled.any { !it.allocated }
+        val lines = if (entry.type == Type.TRANSFER) emptyList()
+        else entry.lines.mapIndexed { i, line -> line.copy(no = i + 1) }
+        val total = if (entry.type == Type.TRANSFER) entry.totalMinor else lines.sumOf { it.amountMinor }
 
         val row = EntryRow.of(
             entry.copy(
                 id = entry.id.ifBlank { UUID.randomUUID().toString() },
-                lines = settled,
+                lines = lines,
                 totalMinor = total,
-                status = when {
-                    entry.status == Status.VOID -> Status.VOID
-                    unsettled -> Status.DRAFT
-                    else -> Status.RECORDED
-                },
+                status = if (entry.status == Status.VOID) Status.VOID else Status.RECORDED,
                 enteredBy = existing?.enteredBy?.ifBlank { snapshot.prefs.me } ?: snapshot.prefs.me,
                 at = existing?.at ?: now,
                 updatedAt = now,
             ),
         )
         dao.putEntry(row)
-        if (row.vendor.isNotBlank()) setPref("lastVendor", row.vendor)
         return row.toEntry()
     }
 
@@ -154,18 +126,15 @@ class Repo private constructor(context: Context) {
         dao.putEntry(row.copy(status = Status.VOID, updatedAt = System.currentTimeMillis(), dirty = true))
     }
 
-    suspend fun addCategory(name: String, kind: String, group: String, icon: String, colour: String, rule: String): Category {
+    suspend fun addCategory(name: String, kind: String, group: String, icon: String, colour: String): Category {
         val category = Category(
             id = "cat-" + UUID.randomUUID().toString().take(8),
             name = name.trim(), group = group, kind = kind, icon = icon, colour = colour,
-            rule = rule, isNew = true, sort = 9000, updatedAt = System.currentTimeMillis(),
+            isNew = true, sort = 9000, updatedAt = System.currentTimeMillis(),
         )
         dao.putCategories(listOf(CategoryRow.of(category)))
         return category
     }
-
-    suspend fun saveCampaign(campaign: Campaign) =
-        dao.putCampaigns(listOf(CampaignRow.of(campaign.copy(updatedAt = System.currentTimeMillis()))))
 
     suspend fun saveAccount(account: Account) =
         dao.putAccounts(listOf(AccountRow.of(account.copy(updatedAt = System.currentTimeMillis()))))
@@ -175,18 +144,19 @@ class Repo private constructor(context: Context) {
     suspend fun markSynced(ids: List<String>) = dao.markClean(ids)
 
     /** What the server sent back, written over what we hold, row by row. */
-    suspend fun acceptFromServer(entries: List<Entry>, campaigns: List<Campaign>,
-                                 categories: List<Category>, accounts: List<Account>, rules: List<Rule>) {
+    suspend fun acceptFromServer(
+        entries: List<Entry>,
+        categories: List<Category>,
+        accounts: List<Account>,
+    ) {
         if (entries.isNotEmpty()) {
             val mine = dao.dirtyEntries().associateBy { it.id }
             // a row we have not pushed yet always wins over the copy coming down
             val keep = entries.filter { mine[it.id] == null }
             if (keep.isNotEmpty()) dao.putEntries(keep.map { EntryRow.of(it, dirty = false) })
         }
-        if (campaigns.isNotEmpty()) dao.putCampaigns(campaigns.map { CampaignRow.of(it) })
         if (categories.isNotEmpty()) dao.putCategories(categories.map { CategoryRow.of(it) })
         if (accounts.isNotEmpty()) dao.putAccounts(accounts.map { AccountRow.of(it) })
-        if (rules.isNotEmpty()) dao.putRules(rules.map { RuleRow.of(it) })
     }
 
     companion object {

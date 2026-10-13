@@ -24,9 +24,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,9 +54,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import pk.ironclad.ledger.data.LedgerState
 import pk.ironclad.ledger.data.Type
 import pk.ironclad.ledger.ui.AccountsScreen
-import pk.ironclad.ledger.ui.AllocationSheet
 import pk.ironclad.ledger.ui.Chip
-import pk.ironclad.ledger.ui.DraftsScreen
 import pk.ironclad.ledger.ui.EntrySheet
 import pk.ironclad.ledger.ui.Field
 import pk.ironclad.ledger.ui.GhostButton
@@ -61,10 +64,11 @@ import pk.ironclad.ledger.ui.LedgerTheme
 import pk.ironclad.ledger.ui.ListRow
 import pk.ironclad.ledger.ui.OnboardScreen
 import pk.ironclad.ledger.ui.RecordsScreen
-import pk.ironclad.ledger.ui.ReportScreen
 import pk.ironclad.ledger.ui.SettingsScreen
-import pk.ironclad.ledger.ui.hexColour
 import pk.ironclad.ledger.ui.unitName
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -106,8 +110,6 @@ fun App(vm: Vm = viewModel()) {
                     }
                     !state.prefs.onboarded -> OnboardScreen(vm)
                     ui.screen == Screen.RECORDS -> RecordsScreen(vm, state, ui)
-                    ui.screen == Screen.DRAFTS -> DraftsScreen(vm, state, ui)
-                    ui.screen == Screen.REPORT -> ReportScreen(vm, state, ui)
                     ui.screen == Screen.ACCOUNTS -> AccountsScreen(vm, state)
                     ui.screen == Screen.SETTINGS -> SettingsScreen(vm, state)
                     else -> HomeScreen(vm, state, ui)
@@ -137,7 +139,6 @@ fun App(vm: Vm = viewModel()) {
                 if (ui.toast.isNotBlank()) SheetMessage(ui.toast)
                 when {
                     ui.newCategoryOpen -> NewCategorySheet(vm, state)
-                    ui.allocOpen -> AllocationSheet(vm, state, draft)
                     else -> EntrySheet(vm, state, ui, draft)
                 }
             }
@@ -149,28 +150,45 @@ fun App(vm: Vm = viewModel()) {
         ) { NewCategorySheet(vm, state) }
     }
 
+    if (ui.datePickerOpen && draft != null) {
+        val picker = rememberDatePickerState(
+            initialSelectedDateMillis = runCatching {
+                LocalDate.parse(draft.date).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            }.getOrNull(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { vm.set { it.copy(datePickerOpen = false) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    val chosen = picker.selectedDateMillis
+                    if (chosen == null) {
+                        vm.set { it.copy(datePickerOpen = false) }
+                    } else {
+                        vm.setDate(
+                            Instant.ofEpochMilli(chosen).atZone(ZoneOffset.UTC).toLocalDate().toString(),
+                        )
+                    }
+                }) { Text("Use this date") }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.set { it.copy(datePickerOpen = false) } }) { Text("Cancel") }
+            },
+            colors = DatePickerDefaults.colors(containerColor = Ink.card),
+        ) {
+            DatePicker(state = picker, showModeToggle = false)
+        }
+    }
+
     if (ui.pickerOpen.isNotBlank()) {
         ModalBottomSheet(
             onDismissRequest = { vm.set { it.copy(pickerOpen = "") } },
             containerColor = Ink.bg, contentColor = Ink.text,
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                if (ui.pickerOpen == "campaign") {
-                    ListRow("🎯", Ink.muted, "All campaigns", "everything together") {
-                        vm.set { it.copy(campaignFilter = "", pickerOpen = "") }
-                    }
-                    state.liveCampaigns.forEach { campaign ->
-                        ListRow(campaign.icon, hexColour(campaign.colour), campaign.name,
-                            campaign.client.ifBlank { campaign.kind }) {
-                            vm.set { it.copy(campaignFilter = campaign.name, pickerOpen = "") }
-                        }
-                    }
-                } else {
-                    listOf("day", "week", "month", "year", "all").forEach { unit ->
-                        ListRow("", Ink.card2, unitName(unit), "",
-                            amount = if (ui.unit == unit) "✓" else "") {
-                            vm.set { it.copy(unit = unit, pickerOpen = "") }
-                        }
+                listOf("day", "week", "month", "year", "all").forEach { unit ->
+                    ListRow("", Ink.card2, unitName(unit), "",
+                        amount = if (ui.unit == unit) "✓" else "") {
+                        vm.set { it.copy(unit = unit, pickerOpen = "") }
                     }
                 }
                 Box(Modifier.size(20.dp))
@@ -253,8 +271,7 @@ fun Dock(vm: Vm, ui: Ui) {
                     vm.go(
                         when (ui.screen) {
                             Screen.HOME -> Screen.RECORDS
-                            Screen.RECORDS -> Screen.REPORT
-                            Screen.REPORT -> Screen.ACCOUNTS
+                            Screen.RECORDS -> Screen.ACCOUNTS
                             else -> Screen.HOME
                         },
                     )
@@ -265,8 +282,7 @@ fun Dock(vm: Vm, ui: Ui) {
             Text(
                 when (ui.screen) {
                     Screen.HOME -> "Records"
-                    Screen.RECORDS -> "By campaign"
-                    Screen.REPORT -> "Money we hold"
+                    Screen.RECORDS -> "Money we hold"
                     else -> "Home"
                 },
                 fontSize = 13.sp, color = Ink.text,
@@ -288,7 +304,6 @@ fun NewCategorySheet(vm: Vm, state: LedgerState) {
     var name by remember { mutableStateOf("") }
     var group by remember { mutableStateOf("Admin & financial") }
     var icon by remember { mutableStateOf("🏷️") }
-    var rule by remember { mutableStateOf("") }
     val groups = state.categories.map { it.group }.filter { it.isNotBlank() }.distinct()
     val icons = listOf("🏷️", "⚡", "⛽", "🌐", "☎️", "🎧", "💻", "🪑", "🧹", "💂", "🚐", "☕", "🎯", "📣", "🧾", "🏦", "📦", "🛠️")
 
@@ -307,16 +322,9 @@ fun NewCategorySheet(vm: Vm, state: LedgerState) {
             icons.forEach { candidate -> Chip(candidate, icon == candidate) { icon = candidate } }
         }
 
-        Text("Campaign, by default", fontSize = 12.sp, color = Ink.muted,
-            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Chip("Pick one each time", rule.isBlank()) { rule = "" }
-            state.rules.forEach { candidate -> Chip(candidate.name, rule == candidate.name) { rule = candidate.name } }
-        }
-
         GhostButton("Add it") {
             if (name.isBlank()) vm.toast("Give it a name.")
-            else vm.addCategory(name, group, icon, "#5C6BC0", rule)
+            else vm.addCategory(name, group, icon, "#5C6BC0")
         }
         GhostButton("Cancel") { vm.set { it.copy(newCategoryOpen = false) } }
         Box(Modifier.size(18.dp))

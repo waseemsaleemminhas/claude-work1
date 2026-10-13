@@ -1,6 +1,7 @@
 package pk.ironclad.ledger.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,10 +29,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import pk.ironclad.ledger.R
 import pk.ironclad.ledger.Screen
 import pk.ironclad.ledger.Ui
 import pk.ironclad.ledger.Vm
@@ -65,7 +68,7 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
     val entries = visibleEntries(state, ui).sortedWith(
         compareByDescending<Entry> { it.date }.thenByDescending { it.at },
     )
-    val totals = totalsOf(entries, ui.campaignFilter)
+    val totals = totalsOf(entries)
     val today = LocalDate.now()
 
     LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -88,8 +91,8 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
             item {
                 val net = dayEntries.sumOf {
                     when (it.type) {
-                        Type.INCOME -> weightOf(it, ui.campaignFilter)
-                        Type.EXPENSE -> -weightOf(it, ui.campaignFilter)
+                        Type.INCOME -> it.totalMinor
+                        Type.EXPENSE -> -it.totalMinor
                         else -> 0L
                     }
                 }
@@ -109,126 +112,22 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
     val first = entry.lines.firstOrNull()
     val category = first?.let { state.category(it.category) }
     val transfer = entry.type == Type.TRANSFER
-    val title = when {
-        transfer -> "Moved money"
-        entry.lines.size > 1 -> "${entry.lines.size} things · ${first?.category.orEmpty()}"
-        else -> first?.category.orEmpty().ifBlank { "—" }
-    }
-    val campaigns = entry.campaigns
-    val who = if (transfer) "${entry.account} → ${entry.toAccount}"
-    else listOf(entry.vendor, entry.account).filter { it.isNotBlank() }.joinToString(" · ")
-    val subtitle = who + when {
-        campaigns.isEmpty() -> ""
-        campaigns.size > 2 -> " · ${campaigns.size} campaigns"
-        else -> " · " + campaigns.joinToString(", ")
-    }
+    val title = if (transfer) "Moved money" else first?.category.orEmpty().ifBlank { "—" }
+    val subtitle = if (transfer) "${entry.account} → ${entry.toAccount}"
+    else listOf(entry.vendor, entry.account, first?.description.orEmpty())
+        .filter { it.isNotBlank() }.joinToString(" · ")
     ListRow(
         icon = if (transfer) "🔁" else category?.icon ?: "•",
         colour = if (transfer) Ink.muted else hexColour(category?.colour ?: "#90A4AE"),
-        title = title + if (entry.status == Status.DRAFT) "  ⚠️" else "",
+        title = title,
         subtitle = subtitle,
-        amount = state.signed(weightOf(entry, ui.campaignFilter), entry.type),
+        amount = state.signed(entry.totalMinor, entry.type),
         amountColour = when (entry.type) {
             Type.INCOME -> Ink.good
             Type.EXPENSE -> Ink.bad
             else -> Ink.muted
         },
-        note = if (entry.lines.size > 1) "${entry.lines.size} lines" else "",
-        warn = entry.status == Status.DRAFT,
     ) { vm.openEntry(entry) }
-}
-
-/** The queue that wants to be empty. */
-@Composable
-fun DraftsScreen(vm: Vm, state: LedgerState, ui: Ui) {
-    LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        item {
-            Column {
-                ScreenHeader("Needs a campaign", vm)
-                Text(
-                    "The money is already off the account. Until a campaign is set, it stays out of the " +
-                        "campaign report — so this list wants to be empty.",
-                    fontSize = 12.5.sp, color = Ink.muted, modifier = Modifier.padding(bottom = 10.dp),
-                )
-            }
-        }
-        if (state.drafts.isEmpty()) item { Empty("Nothing waiting. Good.") }
-        items(state.drafts.size) { i -> EntryRow(vm, state, ui, state.drafts[i]) }
-        item { Box(Modifier.size(90.dp)) }
-    }
-}
-
-/** What each campaign cost. */
-@Composable
-fun ReportScreen(vm: Vm, state: LedgerState, ui: Ui) {
-    val entries = visibleEntries(state, ui).filter { it.type != Type.TRANSFER }
-    data class Figure(var income: Long = 0, var direct: Long = 0, var shared: Long = 0)
-
-    val rows = linkedMapOf<String, Figure>()
-    state.liveCampaigns.forEach { rows[it.name] = Figure() }
-    var unallocated = 0L
-    entries.forEach { entry ->
-        entry.lines.forEach { line ->
-            if (line.allocations.isEmpty()) {
-                if (entry.type == Type.EXPENSE) unallocated += line.amountMinor
-                return@forEach
-            }
-            line.allocations.forEach { allocation ->
-                val figure = rows.getOrPut(allocation.campaign) { Figure() }
-                when {
-                    entry.type == Type.INCOME -> figure.income += allocation.amountMinor
-                    line.basis == "apportioned" -> figure.shared += allocation.amountMinor
-                    else -> figure.direct += allocation.amountMinor
-                }
-            }
-        }
-    }
-
-    LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        item {
-            Column {
-                ScreenHeader("By campaign", vm)
-                PeriodBar(vm, ui)
-                if (unallocated > 0) {
-                    DraftBanner(state.drafts.size.coerceAtLeast(1), state.money(unallocated)) { vm.go(Screen.DRAFTS) }
-                }
-            }
-        }
-        rows.entries.sortedByDescending { it.value.income + it.value.direct + it.value.shared }.forEach { (name, figure) ->
-            item {
-                val campaign = state.campaign(name)
-                val cost = figure.direct + figure.shared
-                val net = figure.income - cost
-                Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                    ListRow(
-                        icon = campaign?.icon ?: "🎯",
-                        colour = hexColour(campaign?.colour ?: "#90A4AE"),
-                        title = name + if (campaign?.kind == "Internal") "  (internal)" else "",
-                        subtitle = if ((campaign?.seats ?: 0) > 0)
-                            "${campaign?.seats} seats · ${state.money(cost / (campaign?.seats ?: 1))} a seat"
-                        else "no seats set",
-                        amount = state.money(net),
-                        amountColour = if (net < 0) Ink.bad else Ink.good,
-                        note = "net",
-                    )
-                    Row(Modifier.fillMaxWidth().padding(start = 46.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text("in ${state.money(figure.income)}", fontSize = 11.sp, color = Ink.good)
-                        Text("direct ${state.money(figure.direct)}", fontSize = 11.sp, color = Ink.muted)
-                        Text("shared ${state.money(figure.shared)}", fontSize = 11.sp, color = Ink.muted)
-                    }
-                }
-            }
-        }
-        item {
-            Text(
-                "Direct is what was bought for that campaign. Shared is its slice of rent, electricity " +
-                    "and the rest, worked out when each entry was saved.",
-                fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(vertical = 10.dp),
-            )
-        }
-        item { Box(Modifier.size(90.dp)) }
-    }
 }
 
 /** Money we hold, including what people are carrying. */
@@ -290,17 +189,7 @@ fun SettingsScreen(vm: Vm, state: LedgerState) {
                 Text("What the keypad fills in for you", fontSize = 12.sp, color = Ink.muted,
                     modifier = Modifier.padding(bottom = 8.dp))
                 Field("My name (goes on every entry)", name) { name = it; vm.setPref("me", it) }
-                Text("My campaign", fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(bottom = 4.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip("Ask me each time", state.prefs.myCampaign.isBlank()) { vm.setPref("myCampaign", "") }
-                    state.liveCampaigns.forEach { campaign ->
-                        Chip(campaign.name, state.prefs.myCampaign == campaign.name) {
-                            vm.setPref("myCampaign", campaign.name)
-                        }
-                    }
-                }
-                Text("My account", fontSize = 12.sp, color = Ink.muted,
-                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                Text("My account", fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(bottom = 4.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     state.liveAccounts.forEach { account ->
                         Chip(account.name, state.prefs.myAccount == account.name) {
@@ -337,8 +226,11 @@ fun SettingsScreen(vm: Vm, state: LedgerState) {
         Card(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
             Column {
                 Text("${state.entries.size} vouchers on this phone", fontSize = 13.sp, color = Ink.text)
-                Text("${state.categories.size} categories · ${state.campaigns.size} campaigns",
-                    fontSize = 12.sp, color = Ink.muted)
+                Text("${state.categories.size} categories", fontSize = 12.sp, color = Ink.muted)
+                Text(
+                    "Ironclad Tech · www.getironcladtech.com",
+                    fontSize = 11.sp, color = Ink.muted, modifier = Modifier.padding(top = 8.dp),
+                )
             }
         }
         Box(Modifier.size(90.dp))
@@ -353,8 +245,13 @@ fun OnboardScreen(vm: Vm) {
         Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.size(40.dp))
-        Text("Ironclad Ledger", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink.text)
+        Box(Modifier.size(24.dp))
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+        )
+        Text("Ironclad Tech Ledger", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink.text)
         Text(
             "The company book, on your phone. It works with no signal — entries go up on their own " +
                 "when there is one.",
@@ -372,5 +269,9 @@ fun OnboardScreen(vm: Vm) {
             colors = ButtonDefaults.buttonColors(containerColor = Ink.brand),
             shape = RoundedCornerShape(12.dp),
         ) { Text("Start", fontWeight = FontWeight.SemiBold) }
+        Text(
+            "www.getironcladtech.com",
+            fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

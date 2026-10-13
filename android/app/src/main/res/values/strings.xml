@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">Ledger</string>
+    <string name="app_name">Ironclad Tech Ledger</string>
+    <string name="website">www.getironcladtech.com</string>
 </resources>

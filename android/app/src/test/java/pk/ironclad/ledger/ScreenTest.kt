@@ -2,6 +2,7 @@ package pk.ironclad.ledger
 
 import android.app.Application
 import android.os.Looper
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -9,8 +10,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -21,8 +22,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import pk.ironclad.ledger.data.Campaign
+import pk.ironclad.ledger.data.Entry
+import pk.ironclad.ledger.data.Line
 import pk.ironclad.ledger.data.Repo
+import pk.ironclad.ledger.data.Type
 import pk.ironclad.ledger.ui.LedgerTheme
 
 /** The screens themselves, drawn and tapped. */
@@ -80,9 +83,10 @@ class ScreenTest {
     }
 
     @Test
-    fun `the first screen asks for a name and lets you in`() {
+    fun `the first screen carries the name and the website`() {
         start()
-        compose.onNodeWithText("Ironclad Ledger").assertIsDisplayed()
+        compose.onNodeWithText("Ironclad Tech Ledger").assertIsDisplayed()
+        compose.onNodeWithText("www.getironcladtech.com").assertExists()
         compose.onNodeWithText("Your name").performTextInput("Ali")
         pump()
         compose.onNodeWithText("Start").performClick()
@@ -102,54 +106,18 @@ class ScreenTest {
     }
 
     @Test
-    fun `tapping a category, typing an amount and tapping Add writes the entry`() {
-        vm.setPref("me", "Ali")
-        waitForLedger()
-        repo.state.value.accounts.firstOrNull()?.let { vm.setPref("myAccount", it.name) }
-        kotlinx.coroutines.runBlocking {
-            repo.saveCampaign(Campaign(id = "p1", name = "Medicare", seats = 10, agents = 9))
-        }
-        waitForLedger()
-        start()
-
-        compose.onNodeWithText("Generator fuel").performClick()
-        pump()
-
-        // the sheet is up, with the campaign already worked out
-        compose.onNodeWithText("By seats").assertIsDisplayed()
-
-        listOf("1", "8", "6", "0").forEach { tapInSheet(it) }
-        tapInSheet("Add expense")
-        Thread.sleep(300)
-        pump()
-
-        val entries = repo.state.value.entries
-        assertEquals("one voucher was written", 1, entries.size)
-        assertEquals(186000L, entries.first().totalMinor)
-        assertTrue("and it was shared over the campaigns",
-            entries.first().lines.first().allocations.isNotEmpty())
-    }
-
-    @Test
     fun `the home screen survives having spending on it`() {
         // The crash was here: category totals are Long and the empty fallback was an
         // Int, so sorting the grid blew up the moment one category had spending and
         // another did not — which is to say, right after the first entry was saved.
         vm.setPref("me", "Ali")
         waitForLedger()
-        kotlinx.coroutines.runBlocking {
-            repo.saveCampaign(Campaign(id = "p9", name = "Medicare", seats = 10, agents = 9))
+        runBlocking {
             repo.save(
-                pk.ironclad.ledger.data.Entry(
-                    id = "", date = repo.today(), type = pk.ironclad.ledger.data.Type.EXPENSE,
+                Entry(
+                    id = "", date = repo.today(), type = Type.EXPENSE,
                     account = repo.state.value.accounts.first().name,
-                    lines = listOf(
-                        pk.ironclad.ledger.data.Line(
-                            category = "Headsets", amountMinor = 125000,
-                            allocationMethod = pk.ironclad.ledger.data.Method.DIRECT,
-                            campaign = "Medicare",
-                        ),
-                    ),
+                    lines = listOf(Line(category = "Headsets", amountMinor = 125000)),
                 ),
             )
         }
@@ -162,11 +130,43 @@ class ScreenTest {
         compose.onNodeWithText("MONEY OUT").assertIsDisplayed()
         compose.onNodeWithText("Headsets").assertExists()
         compose.onNodeWithText("Records").assertIsDisplayed()
-        // the ring shows what was spent, so the totals really were worked out
         assertTrue(
             "the amount is on the screen",
             compose.onAllNodesWithText("Rs 1,250", substring = true).fetchSemanticsNodes().isNotEmpty(),
         )
+    }
+
+    @Test
+    fun `tapping a category, typing an amount and tapping Add writes the entry`() {
+        vm.setPref("me", "Ali")
+        waitForLedger()
+        repo.state.value.accounts.firstOrNull()?.let { vm.setPref("myAccount", it.name) }
+        waitForLedger()
+        start()
+
+        compose.onNodeWithText("Generator fuel").performClick()
+        pump()
+        listOf("1", "8", "6", "0").forEach { tapInSheet(it) }
+        tapInSheet("Add expense")
+        Thread.sleep(300)
+        pump()
+
+        val entries = repo.state.value.entries
+        assertEquals("one voucher was written", 1, entries.size)
+        assertEquals(186000L, entries.first().totalMinor)
+        assertEquals("Generator fuel", entries.first().lines.single().category)
+    }
+
+    @Test
+    fun `the entry sheet shows the date and opens a picker`() {
+        vm.setPref("me", "Ali")
+        waitForLedger()
+        start()
+        compose.onNodeWithText("−").performClick()
+        pump()
+        compose.onNodeWithText("Today", substring = true).assertExists()
+        tapInSheet("📅  Today")
+        assertTrue("the date picker opened", vm.ui.value.datePickerOpen)
     }
 
     @Test
@@ -182,7 +182,7 @@ class ScreenTest {
         // and the words are inside the sheet, where they can actually be seen —
         // the sheet is its own window and covers anything drawn behind it
         assertTrue(
-            "the words are inside the sheet, where they can be seen",
+            "the words are inside the sheet",
             compose.onAllNodesWithText(vm.ui.value.toast, substring = true)
                 .fetchSemanticsNodes().isNotEmpty(),
         )

@@ -15,17 +15,6 @@ object Status {
     const val VOID = "Void"
 }
 
-object Method {
-    const val DIRECT = "direct"
-    const val SPLIT = "split"
-    const val RULE = "rule"
-}
-
-object Basis {
-    const val DIRECT = "direct"
-    const val APPORTIONED = "apportioned"
-}
-
 /** A slice of one line that belongs to one campaign. Amounts are whole paisa. */
 @Serializable
 data class Allocation(
@@ -34,7 +23,7 @@ data class Allocation(
     val amountMinor: Long,
 )
 
-/** One thing on a bill: five headsets, a filter change, a month of rent. */
+/** One thing on a bill: a category and an amount. */
 @Serializable
 data class Line(
     val no: Int = 1,
@@ -45,15 +34,13 @@ data class Line(
     val unitPriceMinor: Long? = null,
     val amountMinor: Long = 0,
     val costCentre: String = "",
-    val allocationMethod: String = Method.DIRECT,
-    val campaign: String = "",
-    val allocationRule: String = "",
-    val allocationRuleVersion: Int? = null,
-    val basis: String = Basis.DIRECT,
+    /**
+     * Only ever filled in by the sheet, for a book that splits its costs across
+     * campaigns. This app keeps one ledger for the whole company, so it reads these
+     * but never writes them.
+     */
     val allocations: List<Allocation> = emptyList(),
-) {
-    val allocated: Boolean get() = allocations.isNotEmpty()
-}
+)
 
 /** A voucher: one payment, one or more lines. */
 @Serializable
@@ -73,9 +60,6 @@ data class Entry(
     val lines: List<Line> = emptyList(),
     val updatedAt: Long = 0,
 ) {
-    val campaigns: List<String>
-        get() = lines.flatMap { it.allocations }.map { it.campaign }.distinct()
-
     val categories: List<String>
         get() = lines.map { it.category }.filter { it.isNotBlank() }.distinct()
 }

@@ -2,24 +2,20 @@ package pk.ironclad.ledger
 
 import android.app.Application
 import android.os.Looper
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import pk.ironclad.ledger.data.Campaign
+import pk.ironclad.ledger.data.LedgerState
 import pk.ironclad.ledger.data.Repo
 import pk.ironclad.ledger.data.Type
 import pk.ironclad.ledger.ui.EntrySheet
@@ -42,15 +38,10 @@ class SheetTouchTest {
         val app: Application = ApplicationProvider.getApplicationContext()
         val repo = Repo.get(app)
         val vm = Vm(app)
-        settle(repo)
-        runBlocking { repo.saveCampaign(Campaign(id = "p1", name = "Medicare", seats = 10, agents = 9)) }
+        settleUntil(repo) { it.ready && it.accounts.isNotEmpty() }
         vm.setPref("me", "Ali")
         vm.setPref("myAccount", repo.state.value.accounts.first().name)
-        vm.setPref("myCampaign", "Medicare")
-        // wait for all of that to actually be in the ledger before opening the sheet
-        settleUntil(repo) {
-            it.campaigns.any { c -> c.name == "Medicare" } && it.prefs.myCampaign == "Medicare"
-        }
+        settleUntil(repo) { it.prefs.me == "Ali" && it.prefs.myAccount.isNotBlank() }
 
         vm.startEntry(Type.EXPENSE, "Headsets")
 
@@ -76,14 +67,11 @@ class SheetTouchTest {
         val entries = repo.state.value.entries
         assertEquals("a voucher was written", 1, entries.size)
         assertEquals(125000L, entries.first().totalMinor)
-        assertTrue("with its campaign", entries.first().lines.first().allocations.isNotEmpty())
+        assertEquals("Headsets", entries.first().lines.single().category)
         Repo.resetForTests()
     }
 
-    private fun settle(repo: Repo) =
-        settleUntil(repo) { it.ready && it.accounts.isNotEmpty() }
-
-    private fun settleUntil(repo: Repo, until: (pk.ironclad.ledger.data.LedgerState) -> Boolean) {
+    private fun settleUntil(repo: Repo, until: (LedgerState) -> Boolean) {
         repeat(200) {
             shadowOf(Looper.getMainLooper()).idle()
             if (until(repo.state.value)) return

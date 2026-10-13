@@ -33,10 +33,8 @@ data class SyncPull(
     val accepted: List<String> = emptyList(),
     val rejected: Map<String, String> = emptyMap(),
     val entries: List<Entry> = emptyList(),
-    val campaigns: List<Campaign> = emptyList(),
     val categories: List<Category> = emptyList(),
     val accounts: List<Account> = emptyList(),
-    val rules: List<Rule> = emptyList(),
 )
 
 /**
@@ -73,7 +71,7 @@ object Sync {
         if (!answer.ok) return@withContext answer.message.ifBlank { "The server turned that down." }
 
         runCatching {
-            repo.acceptFromServer(answer.entries, answer.campaigns, answer.categories, answer.accounts, answer.rules)
+            repo.acceptFromServer(answer.entries, answer.categories, answer.accounts)
         }.onFailure { return@withContext "Could not file what came back: " + (it.message ?: "unknown") }
         if (answer.accepted.isNotEmpty()) repo.markSynced(answer.accepted)
         repo.setPref("lastSync", answer.now.toString())

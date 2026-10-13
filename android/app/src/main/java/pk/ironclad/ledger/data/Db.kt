@@ -48,6 +48,10 @@ data class EntryRow(
     }
 }
 
+/**
+ * Kept, unused, so that upgrading does not change the database and throw away
+ * what is already in it. The ledger is one book for the whole company for now.
+ */
 @Entity(tableName = "campaigns")
 data class CampaignRow(
     @PrimaryKey val id: String, val name: String, val client: String, val code: String,
@@ -103,14 +107,17 @@ data class RuleRow(
 data class MetaRow(@PrimaryKey val key: String, val value: String)
 
 class Converters {
+
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
     @TypeConverter
     fun linesToJson(lines: List<Line>): String =
-        Json.encodeToString(ListSerializer(Line.serializer()), lines)
+        json.encodeToString(ListSerializer(Line.serializer()), lines)
 
     @TypeConverter
     fun jsonToLines(text: String): List<Line> =
         if (text.isBlank()) emptyList()
-        else runCatching { Json.decodeFromString(ListSerializer(Line.serializer()), text) }
+        else runCatching { json.decodeFromString(ListSerializer(Line.serializer()), text) }
             .getOrDefault(emptyList())
 }
 

@@ -37,8 +37,8 @@ import pk.ironclad.ledger.data.Type
 @Composable
 fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
     val entries = visibleEntries(state, ui)
-    val totals = totalsOf(entries, ui.campaignFilter)
-    val sums = byCategory(entries, ui.mode, ui.campaignFilter)
+    val totals = totalsOf(entries)
+    val sums = byCategory(entries, ui.mode)
 
     val shown: List<Category> = buildList {
         addAll(state.categoriesOf(ui.mode))
@@ -61,9 +61,6 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
             Column {
                 TopBar(vm, state, ui)
                 PeriodBar(vm, ui)
-                if (state.drafts.isNotEmpty()) {
-                    DraftBanner(state.drafts.size, state.money(state.draftMinor)) { vm.go(Screen.DRAFTS) }
-                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -78,13 +75,13 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Ring(slices, modeTotal, Modifier.fillMaxWidth(0.72f)) {
                         Text(
-                            if (ui.campaignFilter.isNotBlank()) "spent on ${ui.campaignFilter}" else "Money we hold",
+                            "Money we hold",
                             fontSize = 11.sp, color = Ink.muted, textAlign = TextAlign.Center,
                         )
                         Text(
-                            state.money(if (ui.campaignFilter.isNotBlank()) totals.outMinor else state.totalHeldMinor),
+                            state.money(state.totalHeldMinor),
                             fontSize = 24.sp, fontWeight = FontWeight.Bold,
-                            color = if (ui.campaignFilter.isBlank() && state.totalHeldMinor < 0) Ink.bad else Ink.text,
+                            color = if (state.totalHeldMinor < 0) Ink.bad else Ink.text,
                         )
                         Text(
                             if (modeTotal > 0) {
@@ -159,11 +156,10 @@ fun TopBar(vm: Vm, state: LedgerState, ui: Ui) {
             Modifier.size(38.dp).clip(CircleShape).clickable { vm.go(Screen.SETTINGS) },
             contentAlignment = Alignment.Center,
         ) { Text("☰", fontSize = 18.sp, color = Ink.text) }
-        Chip(
-            text = (ui.campaignFilter.ifBlank { "🎯 All campaigns" }) + " ▾",
-            modifier = Modifier.weight(1f, fill = false),
-        ) { vm.set { it.copy(pickerOpen = "campaign") } }
-        Box(Modifier.weight(1f))
+        Text(
+            "Ironclad Tech Ledger", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+            color = Ink.text, modifier = Modifier.weight(1f),
+        )
         Chip(text = unitName(ui.unit) + " ▾") { vm.set { it.copy(pickerOpen = "period") } }
     }
 }
@@ -194,30 +190,6 @@ fun PeriodBar(vm: Vm, ui: Ui) {
                 Text("›", fontSize = 20.sp, color = Ink.text)
             }
         }
-    }
-}
-
-@Composable
-fun DraftBanner(count: Int, amount: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Ink.warn.copy(alpha = 0.14f))
-            .border(BorderStroke(1.dp, Ink.warn.copy(alpha = 0.4f)), RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                if (count == 1) "1 entry needs a campaign" else "$count entries need a campaign",
-                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Ink.warn,
-            )
-            Text("$amount is not on any campaign yet", fontSize = 12.sp, color = Ink.muted)
-        }
-        Text("›", color = Ink.warn, fontSize = 18.sp)
     }
 }
 

@@ -1,5 +1,7 @@
 /**
- * Ironclad Ledger — the company expense book for a BPO floor, on a phone.
+ * Ironclad Tech Ledger — the company expense book, on a phone.
+ *
+ * www.getironcladtech.com
  *
  * ==> THIS GOES IN ITS OWN, BRAND-NEW SPREADSHEET. <==
  * Not the Sales sheet (Code.gs), not the Recruitment sheet (Recruitment.gs), not
@@ -66,7 +68,7 @@
 
 // ---- Tabs and fixed lists -------------------------------------------------
 
-const LG_TITLE = 'Ironclad Ledger';
+const LG_TITLE = 'Ironclad Tech Ledger';
 
 const LG_ENTRIES = 'Entries';
 const LG_LINES = 'Lines';
@@ -196,11 +198,11 @@ const SEED_RULES = [
   ['Equal split', 'Equal'],
 ];
 
+// A new ledger starts with no campaigns, which means one book for the whole
+// company. Add a client campaign here (or in the app) and the splitting turns
+// itself back on.
 // Name, Client, Code, Kind, Seats, Agents, Icon, Colour
-const SEED_CAMPAIGNS = [
-  ['Campaign A', 'First client', 'CMP-A', 'Client', 10, 8, '🎯', '#1E88E5'],
-  ['Internal / Company', '', 'INT', 'Internal', 0, 0, '🏛️', '#90A4AE'],
-];
+const SEED_CAMPAIGNS = [];
 
 const SEED_ACCOUNTS = [
   ['Petty cash', 'Cash', '', 0, '💵', '#43A047'],
@@ -754,7 +756,7 @@ function prepareEntry_(raw, ctx, trustSettled) {
     total += amount;
   }
 
-  if (unallocated && ctx.settings.blockWithoutCampaign) {
+  if (unallocated && ctx.usingCampaigns && ctx.settings.blockWithoutCampaign) {
     return { error: 'Every line needs a campaign before this can be saved.' };
   }
 
@@ -763,7 +765,7 @@ function prepareEntry_(raw, ctx, trustSettled) {
       type: type, date: date, account: account.name, toAccount: '',
       vendor: txt_(req.vendor, 80), reference: txt_(req.reference, 40), note: txt_(req.note, 200),
       totalMinor: total, lines: lines,
-      status: unallocated ? ST_DRAFT : ST_RECORDED,
+      status: (unallocated && ctx.usingCampaigns) ? ST_DRAFT : ST_RECORDED,
     },
   };
 }
@@ -789,6 +791,9 @@ function context_(ss) {
     ctx.campaignById[c.id] = c;
     ctx.campaignByName[c.name.toLowerCase()] = c;
   });
+  // No client campaign running means the ledger is one book for the whole
+  // company: a line needs nothing but its category.
+  ctx.usingCampaigns = ctx.campaignList.some(c => c.status === 'Active' && c.kind === 'Client');
   ctx.categoryList.forEach(c => { ctx.categoryByName[c.name.toLowerCase()] = c; });
   ctx.accountList.forEach(a => { ctx.accountByName[a.name.toLowerCase()] = a; });
   ctx.ruleList.forEach(r => { ctx.ruleById[r.id] = r; ctx.ruleByName[r.name.toLowerCase()] = r; });
@@ -1737,6 +1742,11 @@ function campaign(name) {
   return null;
 }
 function liveCampaigns() { return D.campaigns.filter(function (c) { return c.status === 'Active'; }); }
+
+// One book for the whole company until somebody puts a client campaign in.
+function usingCampaigns() {
+  return D.campaigns.some(function (c) { return c.status === 'Active' && c.kind === 'Client'; });
+}
 function account(name) {
   for (var i = 0; i < D.accounts.length; i++) if (D.accounts[i].name === name) return D.accounts[i];
   return null;
@@ -1967,7 +1977,9 @@ function renderHome() {
   setApp(
     '<div class="bar">' +
       '<button class="icon" data-go="menu">☰</button>' +
-      '<button class="chip" data-go="pickcampaign">' + esc(camp ? camp.icon + ' ' + camp.name : '🎯 All campaigns') + ' ▾</button>' +
+      (usingCampaigns()
+        ? '<button class="chip" data-go="pickcampaign">' + esc(camp ? camp.icon + ' ' + camp.name : '🎯 All campaigns') + ' ▾</button>'
+        : '') +
       '<button class="chip" data-go="pickaccount">' + esc(acct ? acct.icon + ' ' + acct.name : '👝 All money') + ' ▾</button>' +
       '<div class="grow"></div>' +
       '<button class="chip" data-go="pickunit">' + esc(unitName()) + ' ▾</button>' +
@@ -2127,7 +2139,7 @@ function entrySheet() {
   }).join('');
 
   var lab = allocLabel(L);
-  var allocHtml = isTransfer ? '' :
+  var allocHtml = (isTransfer || !usingCampaigns()) ? '' :
     '<button class="alloc' + (lab.need ? ' need' : '') + '" data-go="alloc">' +
       '<div class="em">' + (lab.need ? '⚠️' : '🎯') + '</div>' +
       '<div class="mid"><b>' + esc(lab.title) + '</b><span>' + esc(lab.sub) + '</span></div>' +
@@ -2851,7 +2863,8 @@ function renderSettings() {
       '<button class="btn" data-go="savesettings">Save settings</button></div>' : '') +
 
     '<div class="card"><p class="note">You are <b>' + esc(me.name || 'signed in') + '</b> (' + esc(me.role || 'Member') + ').<br>' +
-      esc(D.total) + ' vouchers on the sheet.</p>' +
+      esc(D.total) + ' vouchers on the sheet.<br>' +
+      '<span class="dim">Ironclad Tech · www.getironcladtech.com</span></p>' +
       '<button class="btn ghost" data-go="export">Rebuild the Lines and Allocations tabs</button>' +
       (D.sheetUrl ? '<p class="note" style="margin-top:10px"><a href="' + esc(D.sheetUrl) + '" target="_blank">Open the spreadsheet</a></p>' : '') +
     '</div>' +
@@ -2886,10 +2899,13 @@ function menuSheet() {
     '<button class="row" data-go="view:records"><div class="em">🧾</div><div class="mid"><b>Records</b><span>every voucher, newest first</span></div></button>' +
     (D.draftCount ? '<button class="row warn" data-go="view:drafts"><div class="em">⚠️</div><div class="mid"><b>Needs a campaign</b><span>' +
       D.draftCount + ' waiting</span></div></button>' : '') +
-    '<button class="row" data-go="view:report"><div class="em">📊</div><div class="mid"><b>By campaign</b><span>what each one costs</span></div></button>' +
+    (usingCampaigns()
+      ? '<button class="row" data-go="view:report"><div class="em">📊</div><div class="mid"><b>By campaign</b><span>what each one costs</span></div></button>'
+      : '') +
     '<button class="row" data-go="view:accounts"><div class="em">👝</div><div class="mid"><b>Money we hold</b><span>cash, bank, floats</span></div></button>' +
     '<button class="row" data-go="new:Transfer"><div class="em">🔁</div><div class="mid"><b>Move money</b><span>advances and top-ups</span></div></button>' +
-    '<button class="row" data-go="view:campaigns"><div class="em">🎯</div><div class="mid"><b>Campaigns</b><span>seats, agents, status</span></div></button>' +
+    '<button class="row" data-go="view:campaigns"><div class="em">🎯</div><div class="mid"><b>Campaigns</b><span>' +
+      (usingCampaigns() ? 'seats, agents, status' : 'off — one book for the whole company') + '</span></div></button>' +
     '<button class="row" data-go="view:categories"><div class="em">🏷️</div><div class="mid"><b>Categories</b><span>the chart of accounts</span></div></button>' +
     '<button class="row" data-go="view:settings"><div class="em">⚙️</div><div class="mid"><b>Settings</b><span>defaults, currency, export</span></div></button>' +
     '<button class="btn ghost" style="margin-top:6px" data-go="close">Close</button>');

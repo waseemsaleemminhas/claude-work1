@@ -4,15 +4,12 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import pk.ironclad.ledger.data.Allocator
-import pk.ironclad.ledger.data.Basis
-import pk.ironclad.ledger.data.Method
+import pk.ironclad.ledger.data.Entry
+import pk.ironclad.ledger.data.Line
 import pk.ironclad.ledger.data.Repo
 import pk.ironclad.ledger.data.Status
 import pk.ironclad.ledger.data.SyncPull
 import pk.ironclad.ledger.data.SyncPush
-import pk.ironclad.ledger.data.Entry
-import pk.ironclad.ledger.data.Line
 import pk.ironclad.ledger.data.Type
 
 /**
@@ -34,35 +31,19 @@ class SyncContractTest {
         assertTrue(reply.ok)
         assertTrue("entries came down", reply.entries.isNotEmpty())
         assertEquals("the whole chart of accounts came down", 48, reply.categories.size)
-        assertTrue("campaigns came down", reply.campaigns.size >= 3)
-        assertEquals("the three allocation rules came down", 3, reply.rules.size)
         assertTrue("accounts came down", reply.accounts.isNotEmpty())
     }
 
     @Test
-    fun `an entry off the wire keeps its line items and its campaign splits`() {
+    fun `a reply that still carries campaigns is read past, not choked on`() {
+        // the sheet may be keeping campaigns for its own reports; this app has one
+        // book for the whole company and simply ignores them
         val reply = json.decodeFromString(SyncPull.serializer(), captured())
         val entry = reply.entries.first { it.lines.isNotEmpty() }
-        val line = entry.lines.first()
-        assertTrue("the line carries an amount in paisa", line.amountMinor > 0)
-        assertTrue("and a campaign split", line.allocations.isNotEmpty())
-        assertEquals(
-            "the split adds up to the line, to the paisa",
-            line.amountMinor, line.allocations.sumOf { it.amountMinor },
-        )
+        assertTrue("the line still has its amount", entry.lines.first().amountMinor > 0)
         assertTrue("every voucher total matches its lines", reply.entries.all { e ->
             e.type == Type.TRANSFER || e.lines.sumOf { it.amountMinor } == e.totalMinor
         })
-    }
-
-    @Test
-    fun `a shared cost comes down marked as shared, not direct`() {
-        val reply = json.decodeFromString(SyncPull.serializer(), captured())
-        val shared = reply.entries.flatMap { it.lines }.firstOrNull { it.basis == Basis.APPORTIONED }
-        assertTrue("there is an apportioned line in the sample", shared != null)
-        assertEquals(Method.RULE, shared!!.allocationMethod)
-        assertTrue("it names the rule it was split by", shared.allocationRule.isNotBlank())
-        assertTrue("over more than one campaign", shared.allocations.size > 1)
     }
 
     @Test
@@ -73,26 +54,15 @@ class SyncContractTest {
                 Entry(
                     id = "phone-1", date = "2026-10-12", type = Type.EXPENSE, status = Status.RECORDED,
                     totalMinor = 186000, account = "Petty cash", vendor = "Shell", enteredBy = "Ali",
-                    lines = listOf(
-                        Line(
-                            no = 1, category = "Generator fuel", amountMinor = 186000,
-                            allocationMethod = Method.RULE, allocationRule = "By seats",
-                            basis = Basis.APPORTIONED,
-                            allocations = Allocator.splitExact(
-                                186000,
-                                listOf(Allocator.Weight("Final Expense", 20.0), Allocator.Weight("Medicare", 10.0)),
-                            ),
-                        ),
-                    ),
+                    lines = listOf(Line(no = 1, category = "Generator fuel", amountMinor = 186000)),
                 ),
             ),
         )
         val text = json.encodeToString(SyncPush.serializer(), push)
-        listOf("\"op\":\"sync\"", "\"amountMinor\"", "\"allocationRule\"", "\"campaign\"", "\"basis\"")
+        listOf("\"op\":\"sync\"", "\"amountMinor\"", "\"category\"", "\"account\"")
             .forEach { assertTrue("the wire text contains $it", text.contains(it)) }
-        // and it survives the round trip back into our own types
         val back = json.decodeFromString(SyncPush.serializer(), text)
-        assertEquals(186000L, back.entries.first().lines.first().allocations.sumOf { it.amountMinor })
+        assertEquals(186000L, back.entries.first().lines.first().amountMinor)
     }
 
     @Test

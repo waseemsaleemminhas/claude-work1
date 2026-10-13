@@ -7,47 +7,39 @@ import pk.ironclad.ledger.data.Status
 import pk.ironclad.ledger.data.Type
 import java.time.LocalDate
 
-/** What the screen is looking at: the period, and maybe one campaign. */
+/** What the screen is looking at: the period. */
 fun visibleEntries(state: LedgerState, ui: Ui): List<Entry> {
     val (from, to) = Period.range(ui.unit, ui.anchor)
     val start = from.toString()
     val end = to.toString()
-    return state.entries.filter { entry ->
-        entry.status != Status.VOID &&
-            entry.date >= start && entry.date <= end &&
-            (ui.campaignFilter.isBlank() || entry.campaigns.contains(ui.campaignFilter))
+    return state.entries.filter {
+        it.status != Status.VOID && it.date >= start && it.date <= end
     }
 }
-
-/** With a campaign chosen, only that campaign's slice of an entry counts. */
-fun weightOf(entry: Entry, campaign: String): Long =
-    if (campaign.isBlank()) entry.totalMinor
-    else entry.lines.flatMap { it.allocations }.filter { it.campaign == campaign }.sumOf { it.amountMinor }
 
 data class Totals(val inMinor: Long = 0, val outMinor: Long = 0) {
     val leftMinor: Long get() = inMinor - outMinor
 }
 
-fun totalsOf(entries: List<Entry>, campaign: String): Totals {
+fun totalsOf(entries: List<Entry>): Totals {
     var income = 0L
     var spend = 0L
     entries.forEach {
-        val amount = weightOf(it, campaign)
         when (it.type) {
-            Type.INCOME -> income += amount
-            Type.EXPENSE -> spend += amount
+            Type.INCOME -> income += it.totalMinor
+            Type.EXPENSE -> spend += it.totalMinor
         }
     }
     return Totals(income, spend)
 }
 
-fun byCategory(entries: List<Entry>, type: String, campaign: String): Map<String, Long> {
+fun byCategory(entries: List<Entry>, type: String): Map<String, Long> {
     val out = mutableMapOf<String, Long>()
     entries.filter { it.type == type }.forEach { entry ->
         entry.lines.forEach { line ->
-            val amount = if (campaign.isBlank()) line.amountMinor
-            else line.allocations.filter { it.campaign == campaign }.sumOf { it.amountMinor }
-            if (amount > 0) out[line.category] = (out[line.category] ?: 0L) + amount
+            if (line.amountMinor > 0) {
+                out[line.category] = (out[line.category] ?: 0L) + line.amountMinor
+            }
         }
     }
     return out

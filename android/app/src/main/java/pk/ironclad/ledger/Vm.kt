@@ -7,13 +7,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import pk.ironclad.ledger.data.Allocation
-import pk.ironclad.ledger.data.Allocator
-import pk.ironclad.ledger.data.Campaign
 import pk.ironclad.ledger.data.Entry
 import pk.ironclad.ledger.data.LedgerState
 import pk.ironclad.ledger.data.Line
-import pk.ironclad.ledger.data.Method
 import pk.ironclad.ledger.data.Money
 import pk.ironclad.ledger.data.Repo
 import pk.ironclad.ledger.data.Status
@@ -22,7 +18,7 @@ import pk.ironclad.ledger.data.Type
 import java.time.LocalDate
 import kotlin.math.floor
 
-enum class Screen { ONBOARD, HOME, RECORDS, DRAFTS, REPORT, ACCOUNTS, SETTINGS }
+enum class Screen { ONBOARD, HOME, RECORDS, ACCOUNTS, SETTINGS }
 
 /** The keypad is a small calculator, the way Monefy's is. */
 data class Calc(val cur: String = "", val acc: Double? = null, val op: Char? = null) {
@@ -103,27 +99,19 @@ data class Draft(
     val vendor: String = "",
     val reference: String = "",
     val note: String = "",
-    val lines: List<Line> = listOf(Line()),
-    val index: Int = 0,
+    val line: Line = Line(),
     val calc: Calc = Calc(),
     val more: Boolean = false,
     val armed: Boolean = false,
 ) {
-    val line: Line get() = lines.getOrElse(index) { Line() }
     val editing: Boolean get() = id.isNotBlank()
 
-    fun withLine(change: (Line) -> Line): Draft =
-        copy(lines = lines.mapIndexed { i, l -> if (i == index) change(l) else l })
+    fun withLine(change: (Line) -> Line): Draft = copy(line = change(line))
 
-    /** The amount being typed belongs to the line it is being typed on. */
-    fun settledLines(state: LedgerState): List<Line> =
-        lines.mapIndexed { i, l ->
-            val withAmount = if (i == index) l.copy(amountMinor = calc.amountMinor) else l
-            Allocator.settle(withAmount, state.campaigns, state.rules)
-        }
+    /** The amount being typed is this voucher's amount. */
+    fun lines(): List<Line> = listOf(line.copy(no = 1, amountMinor = calc.amountMinor))
 
-    fun totalMinor(state: LedgerState): Long =
-        if (type == Type.TRANSFER) calc.amountMinor else settledLines(state).sumOf { it.amountMinor }
+    val totalMinor: Long get() = calc.amountMinor
 }
 
 data class Ui(
@@ -131,9 +119,8 @@ data class Ui(
     val mode: String = Type.EXPENSE,
     val unit: String = "month",
     val anchor: LocalDate = LocalDate.now(),
-    val campaignFilter: String = "",
     val draft: Draft? = null,
-    val allocOpen: Boolean = false,
+    val datePickerOpen: Boolean = false,
     val newCategoryOpen: Boolean = false,
     val pickerOpen: String = "",
     val toast: String = "",
@@ -187,10 +174,6 @@ class Vm(app: Application) : AndroidViewModel(app) {
         val state = ledger.value
         val account = state.prefs.myAccount.takeIf { name -> state.liveAccounts.any { it.name == name } }
             ?: state.liveAccounts.firstOrNull()?.name.orEmpty()
-        var line = Line(category = category)
-        if (category.isNotBlank()) {
-            line = Allocator.preset(line, state.category(category), state.prefs.myCampaign, state.campaigns, state.rules)
-        }
         set {
             it.copy(
                 draft = Draft(
@@ -198,7 +181,7 @@ class Vm(app: Application) : AndroidViewModel(app) {
                     date = repo.today(),
                     account = account,
                     toAccount = if (type == Type.TRANSFER) state.liveAccounts.firstOrNull { a -> a.name != account }?.name.orEmpty() else "",
-                    lines = listOf(line),
+                    line = Line(category = category),
                 ),
             )
         }
@@ -212,78 +195,28 @@ class Vm(app: Application) : AndroidViewModel(app) {
                     id = entry.id, type = entry.type, date = entry.date, account = entry.account,
                     toAccount = entry.toAccount, vendor = entry.vendor, reference = entry.reference,
                     note = entry.note,
-                    lines = entry.lines.ifEmpty { listOf(Line()) }.map { line ->
-                        line.copy(
-                            campaign = if (line.allocationMethod != Method.RULE && line.allocations.size == 1)
-                                line.allocations.first().campaign else line.campaign,
-                        )
-                    },
+                    line = entry.lines.firstOrNull() ?: Line(),
                     calc = Calc.of(entry.lines.firstOrNull()?.amountMinor ?: entry.totalMinor),
                 ),
             )
         }
     }
 
-    fun closeEntry() = set { it.copy(draft = null, allocOpen = false, newCategoryOpen = false) }
+    fun closeEntry() = set { it.copy(draft = null, datePickerOpen = false, newCategoryOpen = false) }
+
+    fun setDate(date: String) = set {
+        it.copy(draft = it.draft?.copy(date = date), datePickerOpen = false)
+    }
 
     fun editDraft(change: (Draft) -> Draft) = set { it.copy(draft = it.draft?.let(change)) }
 
-    fun pickCategory(name: String) {
-        val state = ledger.value
-        editDraft { d ->
-            d.withLine { line ->
-                Allocator.preset(
-                    line.copy(category = name, amountMinor = d.calc.amountMinor),
-                    state.category(name), state.prefs.myCampaign, state.campaigns, state.rules,
-                )
-            }
-        }
+    fun pickCategory(name: String) = editDraft { d ->
+        d.withLine { it.copy(category = name, group = ledger.value.category(name)?.group.orEmpty()) }
     }
 
     fun key(k: String) = editDraft { it.copy(calc = it.calc.digit(k)) }
     fun operate(op: Char) = editDraft { it.copy(calc = it.calc.operate(op)) }
     fun backspace() = editDraft { it.copy(calc = it.calc.back()) }
-
-    fun addLine() {
-        val draft = ui.value.draft ?: return
-        if (draft.line.category.isBlank()) return toast("Finish this line first.")
-        if (draft.calc.amountMinor <= 0) return toast("This line needs an amount first.")
-        val kept = draft.withLine { it.copy(amountMinor = draft.calc.amountMinor) }
-        set {
-            it.copy(draft = kept.copy(lines = kept.lines + Line(), index = kept.lines.size, calc = Calc()))
-        }
-    }
-
-    fun goToLine(i: Int) {
-        val draft = ui.value.draft ?: return
-        val kept = draft.withLine { it.copy(amountMinor = draft.calc.amountMinor) }
-        set { it.copy(draft = kept.copy(index = i, calc = Calc.of(kept.lines[i].amountMinor))) }
-    }
-
-    fun dropLine() {
-        val draft = ui.value.draft ?: return
-        if (draft.lines.size < 2) return
-        val lines = draft.lines.toMutableList().also { it.removeAt(draft.index) }
-        val index = (draft.index - 1).coerceAtLeast(0)
-        set { it.copy(draft = draft.copy(lines = lines, index = index, calc = Calc.of(lines[index].amountMinor))) }
-    }
-
-    fun setAllocationToCampaign(campaign: String) = editDraft { d ->
-        d.withLine { it.copy(allocationMethod = Method.DIRECT, campaign = campaign, allocationRule = "") }
-    }
-
-    fun setAllocationToRule(rule: String) = editDraft { d ->
-        d.withLine { it.copy(allocationMethod = Method.RULE, allocationRule = rule) }
-    }
-
-    fun setCustomSplit(shares: Map<String, Int>) = editDraft { d ->
-        d.withLine { line ->
-            line.copy(
-                allocationMethod = Method.SPLIT,
-                allocations = shares.filter { it.value > 0 }.map { Allocation(it.key, it.value, 0) },
-            )
-        }
-    }
 
     fun save() {
         val draft = ui.value.draft ?: return
@@ -299,11 +232,8 @@ class Vm(app: Application) : AndroidViewModel(app) {
                 return toast("Pick two different accounts.")
             }
         } else {
-            val lines = draft.settledLines(state)
-            lines.forEachIndexed { i, line ->
-                if (line.category.isBlank()) return toast("Line ${i + 1} needs a category.")
-                if (line.amountMinor <= 0) return toast("Line ${i + 1} needs an amount.")
-            }
+            if (draft.line.category.isBlank()) return toast("Pick a category first.")
+            if (draft.calc.amountMinor <= 0) return toast("Put in an amount above zero.")
             if (draft.account.isBlank()) return toast("Pick the account it came from.")
         }
 
@@ -317,18 +247,12 @@ class Vm(app: Application) : AndroidViewModel(app) {
             reference = draft.reference,
             note = draft.note,
             totalMinor = draft.calc.amountMinor,
-            lines = if (draft.type == Type.TRANSFER) emptyList() else draft.settledLines(state),
+            lines = if (draft.type == Type.TRANSFER) emptyList() else draft.lines(),
         )
         work("save that") {
             val saved = repo.save(entry)
             closeEntry()
-            toast(
-                when {
-                    saved.status == Status.DRAFT -> "Saved — it still needs a campaign."
-                    draft.editing -> "Saved."
-                    else -> "Added " + state.money(saved.totalMinor)
-                },
-            )
+            toast(if (draft.editing) "Saved." else "Added " + state.money(saved.totalMinor))
             Sync.nudge(getApplication())
         }
     }
@@ -347,17 +271,17 @@ class Vm(app: Application) : AndroidViewModel(app) {
 
     // ---- the chart of accounts, and me
 
-    fun addCategory(name: String, group: String, icon: String, colour: String, rule: String) {
+    fun addCategory(name: String, group: String, icon: String, colour: String) {
         val type = ui.value.draft?.type ?: ui.value.mode
-        viewModelScope.launch {
-            val category = repo.addCategory(name, if (type == Type.INCOME) Type.INCOME else Type.EXPENSE, group, icon, colour, rule)
+        work("add that category") {
+            val category = repo.addCategory(
+                name, if (type == Type.INCOME) Type.INCOME else Type.EXPENSE, group, icon, colour,
+            )
             set { it.copy(newCategoryOpen = false) }
             if (ui.value.draft != null) pickCategory(category.name)
             toast("Added \"${category.name}\".")
         }
     }
-
-    fun saveCampaign(campaign: Campaign) = work("save that campaign") { repo.saveCampaign(campaign) }
 
     fun setPref(key: String, value: String) = work("remember that") { repo.setPref(key, value) }
 

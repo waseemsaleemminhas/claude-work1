@@ -1,4 +1,6 @@
-# Ironclad Ledger — the Android app
+# Ironclad Tech Ledger — the Android app
+
+www.getironcladtech.com
 
 The company book on a phone, built to work with no signal. Every entry is written
 to the phone first and syncs to the shared sheet on its own when there is a
@@ -6,27 +8,24 @@ network. Nobody ever waits for a spinner to record a cost.
 
 ## What it does today
 
-- **Tap, type, done.** Tap a category, punch the amount into the keypad, Add. The
-  campaign is already filled in — a category either carries a sharing rule
-  (electricity, rent and the rest go out by seats) or takes the person's own
-  default.
-- **Line items.** One receipt can be five headsets and two keyboards on different
-  categories, and still be one payment.
-- **Mandatory campaign allocation.** Every line is split to the last paisa,
-  largest remainder with ties broken on campaign name — the same arithmetic as the
-  sheet and the web page, so no two devices ever disagree. A rule is worked out
-  once and frozen into the entry; last month's report does not move when seat
-  counts change.
-- **Drafts.** A line that cannot be allocated yet still saves: the money really
-  left the account. It waits in a "Needs a campaign" queue that wants to be empty.
+- **Tap, type, done.** Tap a category, punch the amount into the keypad, Add.
+- **One book for the whole company.** No campaigns, no cost splitting: a voucher
+  is a category and an amount. The sheet still knows how to split across campaigns
+  if that is ever turned back on, and this app reads past it.
+- **The date is on the entry screen**, because an expense is often written up a day
+  or two late. Everything else — who it was paid to, the bill number, a note —
+  sits behind "More" so the common case stays three taps.
 - **Works offline, syncs when it can.** Room on the phone is the source of truth.
   WorkManager pushes what is unsent and pulls what changed, whenever there is a
   network. With no server link set at all, it is simply a ledger on that phone.
-- Records, a by-campaign report, floats (cash someone is carrying), and adding a
-  category mid-entry.
+- Records, money held (including cash somebody is carrying), voiding rather than
+  deleting, and adding a category mid-entry.
 
-Not built yet: the home-screen widget, editing campaigns and accounts from the app
-(do that on the sheet for now), and receipt photos.
+Not built yet: the home-screen widget, editing accounts from the app (do that on
+the sheet for now), and receipt photos.
+
+The launcher mark is a placeholder drawn for this build — send the real Ironclad
+Tech logo as a PNG or SVG and it drops straight in.
 
 ## Getting the APK
 
@@ -84,7 +83,6 @@ data model does not change.
 ## How it is put together
 
     data/Model.kt       the words and shapes: Entry, Line, Allocation, Campaign…
-    data/Allocator.kt   the split engine — the one piece that must match the server
     data/Db.kt          Room: the ledger on this phone
     data/Seed.kt        the BPO chart of accounts a new ledger starts with
     data/Repo.kt        every read and write, with no network in the way
@@ -100,8 +98,14 @@ sheet does, so the two sides can be reconciled by eye.
 
     ./gradlew testDebugUnitTest
 
-- `AllocatorTest` — the split engine: thirds of a rupee, awkward amounts, the
-  tie-break that keeps two phones agreeing, by-seats and by-agents sharing, closed
-  and internal campaigns taking no share.
+- `LedgerFlowTest` — the real database, repository and view model: seeding, the
+  tap-tap flow, the calculator keypad, back-dating an entry, voiding, editing.
+- `ScreenTest` / `SheetTouchTest` — the screens drawn and tapped, including the
+  home screen with spending on it (which is where the first crash lived).
 - `SyncContractTest` — parses a reply captured from the real Apps Script code, so
   the two halves are checked against what the server actually sends.
+
+Robolectric runs the real framework, Room and Compose on the JVM, so all of this
+runs without a device. It cannot aim a touch into a dialog window, so taps inside
+the bottom sheet go through the click action the node publishes; the same sheet
+drawn in an ordinary window is tapped for real.
