@@ -30,17 +30,56 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import kotlin.math.atan2
+import kotlin.math.hypot
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
 
-/** A slice of the ring: how much, and in what colour. */
-data class Slice(val value: Long, val colour: Color)
+/** A slice of the ring: how much, in what colour, and what it stands for. */
+data class Slice(
+    val value: Long,
+    val colour: Color,
+    val name: String = "",
+    val icon: String = "",
+)
 
 @Composable
-fun Ring(slices: List<Slice>, total: Long, modifier: Modifier = Modifier, centre: @Composable () -> Unit) {
+fun Ring(
+    slices: List<Slice>,
+    total: Long,
+    modifier: Modifier = Modifier,
+    picked: String = "",
+    onPick: (String) -> Unit = {},
+    centre: @Composable () -> Unit,
+) {
     Box(modifier = modifier.aspectRatio(1f), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(
+            Modifier.fillMaxSize().pointerInput(slices, total) {
+                // A phone has no hover, so a tap is how you ask what a slice is.
+                detectTapGestures { at ->
+                    val wide = size.width.toFloat()
+                    val tall = size.height.toFloat()
+                    val middle = Offset(wide / 2f, tall / 2f)
+                    val reach = minOf(wide, tall) / 2f
+                    val away = hypot(
+                        (at.x - middle.x).toDouble(), (at.y - middle.y).toDouble(),
+                    ).toFloat()
+                    if (away > reach * 0.52f && away <= reach) {
+                        val name = sliceAt(slices, total, at, middle)
+                        onPick(if (name == picked) "" else name)
+                    } else if (away <= reach * 0.52f) {
+                        onPick("")
+                    }
+                }
+            },
+        ) {
             val thickness = size.minDimension * 0.14f
             val inset = thickness / 2
             val arcSize = Size(size.width - thickness, size.height - thickness)
@@ -53,11 +92,18 @@ fun Ring(slices: List<Slice>, total: Long, modifier: Modifier = Modifier, centre
                 slices.forEach { slice ->
                     val sweep = 360f * (slice.value.toFloat() / total.toFloat())
                     if (sweep > 0f) {
+                        val chosen = picked.isNotBlank() && slice.name == picked
+                        val fat = if (chosen) thickness * 1.45f else thickness
+                        val fatInset = (size.minDimension - (size.minDimension - fat)) / 2
                         drawArc(
-                            color = slice.colour, startAngle = start,
+                            color = if (picked.isBlank() || chosen) slice.colour
+                                else slice.colour.copy(alpha = 0.3f),
+                            startAngle = start,
                             sweepAngle = (sweep - if (slices.size > 1) 1.2f else 0f).coerceAtLeast(0.6f),
-                            useCenter = false, topLeft = Offset(inset, inset), size = arcSize,
-                            style = Stroke(width = thickness),
+                            useCenter = false,
+                            topLeft = Offset(fatInset, fatInset),
+                            size = Size(size.width - fat, size.height - fat),
+                            style = Stroke(width = fat),
                         )
                         start += sweep
                     }
@@ -65,6 +111,118 @@ fun Ring(slices: List<Slice>, total: Long, modifier: Modifier = Modifier, centre
             }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) { centre() }
+    }
+}
+
+/** Which slice a tap landed on, by the angle from twelve o'clock. */
+internal fun sliceAt(slices: List<Slice>, total: Long, at: Offset, middle: Offset): String {
+    if (total <= 0) return ""
+    var degrees = Math.toDegrees(
+        atan2((at.y - middle.y).toDouble(), (at.x - middle.x).toDouble()),
+    ).toFloat() + 90f
+    while (degrees < 0f) degrees += 360f
+    while (degrees >= 360f) degrees -= 360f
+    var start = 0f
+    slices.forEach { slice ->
+        val sweep = 360f * (slice.value.toFloat() / total.toFloat())
+        if (degrees >= start && degrees < start + sweep) return slice.name
+        start += sweep
+    }
+    return slices.lastOrNull()?.name.orEmpty()
+}
+
+/** The slices spelled out, because a colour on its own says nothing. */
+@Composable
+fun RingLabels(
+    slices: List<Slice>,
+    total: Long,
+    money: (Long) -> String,
+    picked: String,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (slices.isEmpty() || total <= 0) return
+    Column(modifier.fillMaxWidth().padding(top = 8.dp)) {
+        slices.take(5).forEach { slice ->
+            val share = (slice.value * 100.0 / total).let { if (it < 1) "<1" else it.toInt().toString() }
+            val chosen = slice.name == picked
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (chosen) Ink.card2 else Color.Transparent)
+                    .clickable { onPick(if (chosen) "" else slice.name) }
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(slice.colour))
+                Text(
+                    (if (slice.icon.isNotBlank()) slice.icon + "  " else "") + slice.name,
+                    fontSize = 12.sp, color = if (chosen) Ink.text else Ink.muted,
+                    fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+                Text(share + "%", fontSize = 11.sp, color = Ink.muted,
+                    modifier = Modifier.padding(end = 8.dp))
+                Text(money(slice.value), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    color = if (chosen) Ink.text else Ink.muted)
+            }
+        }
+        if (slices.size > 5) {
+            Text(
+                "and " + (slices.size - 5) + " more",
+                fontSize = 11.sp, color = Ink.muted,
+                modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Money in against money out, drawn to scale. Sits at the foot of Records so
+ * the two numbers that matter are there whatever you have scrolled to.
+ */
+@Composable
+fun InOutBar(inMinor: Long, outMinor: Long, money: (Long) -> String, modifier: Modifier = Modifier) {
+    val most = maxOf(inMinor, outMinor, 1L).toFloat()
+    Column(
+        modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Ink.card)
+            .border(BorderStroke(1.dp, Ink.line), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        listOf(
+            Triple("PKR IN", inMinor, Ink.good),
+            Triple("PKR OUT", outMinor, Ink.bad),
+        ).forEach { (label, amount, colour) ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
+                Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = colour,
+                    modifier = Modifier.width(58.dp))
+                Box(
+                    Modifier.weight(1f).height(16.dp).clip(RoundedCornerShape(5.dp))
+                        .background(Ink.card2),
+                ) {
+                    Box(
+                        Modifier.fillMaxHeight()
+                            .fillMaxWidth((amount.toFloat() / most).coerceIn(0f, 1f))
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(colour),
+                    )
+                }
+                Text(
+                    money(amount), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink.text,
+                    maxLines = 1, modifier = Modifier.padding(start = 8.dp).widthIn(min = 64.dp),
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+        val left = inMinor - outMinor
+        Text(
+            (if (left >= 0) "Left over " else "Short by ") + money(kotlin.math.abs(left)),
+            fontSize = 11.sp, color = if (left < 0) Ink.bad else Ink.muted,
+            modifier = Modifier.padding(top = 4.dp, start = 58.dp),
+        )
     }
 }
 

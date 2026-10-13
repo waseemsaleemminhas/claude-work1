@@ -153,6 +153,8 @@ data class Ui(
     val confirmDiscard: Boolean = false,
     /** What has been typed into the category search box. */
     val catQuery: String = "",
+    /** The ring slice being asked about, by category name. */
+    val picked: String = "",
 )
 
 class Vm(app: Application) : AndroidViewModel(app) {
@@ -264,6 +266,9 @@ class Vm(app: Application) : AndroidViewModel(app) {
     }
 
     fun searchCategories(text: String) = set { it.copy(catQuery = text) }
+
+    /** Tapping a slice of the ring, or its label, asks what it is. */
+    fun pickSlice(name: String) = set { it.copy(picked = name) }
 
     fun setDate(date: String) = set {
         it.copy(draft = it.draft?.copy(date = date), datePickerOpen = false)

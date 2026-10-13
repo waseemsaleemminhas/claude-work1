@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,21 +74,16 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
     val totals = totalsOf(entries)
     val today = LocalDate.now()
 
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         item {
             Column {
                 ScreenHeader("Records", vm)
                 PeriodBar(vm, ui)
-                Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill("In", state.money(totals.inMinor), Ink.good, false, Modifier.weight(1f)) {}
-                    Pill("Out", state.money(totals.outMinor), Ink.bad, false, Modifier.weight(1f)) {}
-                    Pill("Left", state.money(totals.leftMinor),
-                        if (totals.leftMinor < 0) Ink.bad else Ink.good, false, Modifier.weight(1f)) {}
-                }
             }
         }
         if (entries.isEmpty()) {
-            item { Empty("Nothing in this period yet.\nTap − or + to put something in.") }
+            item { Empty("Nothing in this period yet.\nTap PKR OUT or PKR IN to put something in.") }
         }
         entries.groupBy { it.date }.forEach { (date, dayEntries) ->
             item {
@@ -105,7 +101,15 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
             }
             items(dayEntries.size) { i -> EntryRow(vm, state, ui, dayEntries[i]) }
         }
-        item { Box(Modifier.size(90.dp)) }
+        // room for the footer, so the last voucher is never hidden behind it
+        item { Box(Modifier.size(124.dp)) }
+    }
+
+    // The two numbers that matter, to scale, wherever you have scrolled to.
+    InOutBar(
+        totals.inMinor, totals.outMinor, { state.money(it) },
+        Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp),
+    )
     }
 }
 
