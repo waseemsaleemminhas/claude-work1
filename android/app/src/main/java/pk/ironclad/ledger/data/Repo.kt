@@ -196,6 +196,11 @@ class Repo private constructor(context: Context) {
             instance ?: Repo(context).also { instance = it }
         }
 
+        fun resetForTests() = synchronized(this) {
+            instance = null
+            LedgerDb.resetForTests()
+        }
+
         /** Opening balance, plus what came in, less what went out. Voided rows count for nothing. */
         fun withBalances(accounts: List<Account>, entries: List<Entry>): List<Account> {
             val by = accounts.associate { it.name to it.openingMinor }.toMutableMap()

@@ -150,6 +150,21 @@ class Vm(app: Application) : AndroidViewModel(app) {
 
     fun set(change: (Ui) -> Ui) { _ui.value = change(_ui.value) }
 
+    /**
+     * Anything that touches the database or the network. If it goes wrong the
+     * person is told, in words, instead of the app vanishing.
+     */
+    private fun work(where: String, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (failure: Throwable) {
+                Crash.note(getApplication(), where, failure)
+                toast("Could not " + where + ": " + (failure.message ?: failure.javaClass.simpleName))
+            }
+        }
+    }
+
     fun toast(message: String) = set { it.copy(toast = message) }
     fun clearToast() = set { it.copy(toast = "") }
 
@@ -304,7 +319,7 @@ class Vm(app: Application) : AndroidViewModel(app) {
             totalMinor = draft.calc.amountMinor,
             lines = if (draft.type == Type.TRANSFER) emptyList() else draft.settledLines(state),
         )
-        viewModelScope.launch {
+        work("save that") {
             val saved = repo.save(entry)
             closeEntry()
             toast(
@@ -322,7 +337,7 @@ class Vm(app: Application) : AndroidViewModel(app) {
         val draft = ui.value.draft ?: return
         if (!draft.editing) return
         if (!draft.armed) return editDraft { it.copy(armed = true) }
-        viewModelScope.launch {
+        work("void that") {
             repo.void(draft.id)
             closeEntry()
             toast("Voided. It stays in the book, marked void.")
@@ -342,15 +357,20 @@ class Vm(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun saveCampaign(campaign: Campaign) = viewModelScope.launch { repo.saveCampaign(campaign) }
+    fun saveCampaign(campaign: Campaign) = work("save that campaign") { repo.saveCampaign(campaign) }
 
-    fun setPref(key: String, value: String) = viewModelScope.launch { repo.setPref(key, value) }
+    fun setPref(key: String, value: String) = work("remember that") { repo.setPref(key, value) }
 
     fun syncNow() {
         if (ui.value.syncing) return
         set { it.copy(syncing = true) }
         viewModelScope.launch {
-            val result = Sync.runOnce(getApplication())
+            val result = try {
+                Sync.runOnce(getApplication())
+            } catch (failure: Throwable) {
+                Crash.note(getApplication(), "sync", failure)
+                "Sync did not work: " + (failure.message ?: failure.javaClass.simpleName)
+            }
             set { it.copy(syncing = false) }
             toast(result)
         }

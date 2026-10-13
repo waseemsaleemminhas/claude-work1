@@ -177,5 +177,8 @@ abstract class LedgerDb : RoomDatabase() {
                 context.applicationContext, LedgerDb::class.java, "ledger.db",
             ).fallbackToDestructiveMigration().build().also { instance = it }
         }
+
+        /** Tests start from a clean book, the way a fresh install does. */
+        fun resetForTests() = synchronized(this) { instance = null }
     }
 }

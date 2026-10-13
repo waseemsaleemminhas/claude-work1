@@ -45,10 +45,10 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
         sums.keys.forEach { name ->
             if (none { it.name == name }) state.category(name)?.let { add(it) }
         }
-    }.sortedWith(compareByDescending<Category> { sums[it.name] ?: 0 }.thenBy { it.sort })
+    }.sortedWith(compareByDescending<Category> { sums[it.name] ?: 0L }.thenBy { it.sort })
 
     val modeTotal = if (ui.mode == Type.INCOME) totals.inMinor else totals.outMinor
-    val slices = shown.filter { (sums[it.name] ?: 0) > 0 }
+    val slices = shown.filter { (sums[it.name] ?: 0L) > 0L }
         .map { Slice(sums.getValue(it.name), hexColour(it.colour)) }
 
     LazyVerticalGrid(
@@ -99,7 +99,7 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
         }
 
         items(shown, key = { it.id }) { category ->
-            CategoryTile(category, sums[category.name] ?: 0, state) {
+            CategoryTile(category, sums[category.name] ?: 0L, state) {
                 vm.startEntry(category.kind, category.name)
             }
         }

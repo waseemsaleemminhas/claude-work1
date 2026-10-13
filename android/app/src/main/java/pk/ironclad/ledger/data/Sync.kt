@@ -72,7 +72,9 @@ object Sync {
 
         if (!answer.ok) return@withContext answer.message.ifBlank { "The server turned that down." }
 
-        repo.acceptFromServer(answer.entries, answer.campaigns, answer.categories, answer.accounts, answer.rules)
+        runCatching {
+            repo.acceptFromServer(answer.entries, answer.campaigns, answer.categories, answer.accounts, answer.rules)
+        }.onFailure { return@withContext "Could not file what came back: " + (it.message ?: "unknown") }
         if (answer.accepted.isNotEmpty()) repo.markSynced(answer.accepted)
         repo.setPref("lastSync", answer.now.toString())
 
@@ -131,10 +133,13 @@ object Sync {
 
     /** Ask for a sync when there is a network. Harmless to call often. */
     fun nudge(context: Context) {
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, request)
+        // Never let catching up with the others get in the way of recording a cost.
+        runCatching {
+            val request = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, request)
+        }
     }
 }
 

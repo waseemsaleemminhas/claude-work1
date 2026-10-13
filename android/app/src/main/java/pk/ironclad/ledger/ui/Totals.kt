@@ -47,7 +47,7 @@ fun byCategory(entries: List<Entry>, type: String, campaign: String): Map<String
         entry.lines.forEach { line ->
             val amount = if (campaign.isBlank()) line.amountMinor
             else line.allocations.filter { it.campaign == campaign }.sumOf { it.amountMinor }
-            if (amount > 0) out[line.category] = (out[line.category] ?: 0) + amount
+            if (amount > 0) out[line.category] = (out[line.category] ?: 0L) + amount
         }
     }
     return out
