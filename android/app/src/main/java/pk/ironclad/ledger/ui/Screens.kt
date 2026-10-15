@@ -182,23 +182,35 @@ fun AccountsScreen(vm: Vm, state: LedgerState) {
                 }
             }
         }
-        items(state.accounts.size) { i ->
-            val account = state.accounts[i]
+        // An account hidden on the sheet is gone from here, unless it still
+        // holds money — then it stays, marked, because money nobody is looking
+        // at is how a book goes wrong.
+        val shown = state.accounts.filter { !it.archived || it.balanceMinor != 0L }
+        items(shown.size) { i ->
+            val account = shown[i]
+            val stranded = account.archived && account.balanceMinor != 0L
             ListRow(
                 icon = account.icon,
                 colour = hexColour(account.colour),
-                title = account.name + if (account.archived) "  (hidden)" else "",
+                title = account.name + if (stranded) "  (hidden — still holds money)" else "",
                 subtitle = account.kind + if (account.heldBy.isNotBlank()) " · held by ${account.heldBy}" else "",
                 amount = state.money(account.balanceMinor),
-                amountColour = if (account.balanceMinor < 0) Ink.bad else Ink.text,
-            )
+                amountColour = when {
+                    account.balanceMinor < 0 -> Ink.bad
+                    stranded -> Ink.warn
+                    else -> Ink.text
+                },
+                note = if (stranded) "move it out" else "",
+                warn = stranded,
+            ) { vm.startEntry(Type.TRANSFER) }
         }
         item {
             Column {
                 GhostButton("Move money between accounts") { vm.startEntry(Type.TRANSFER) }
                 Text(
-                    "Cash someone is carrying is an account of kind Float, held by them. Giving an advance " +
-                        "is a move into it; what is left is what they still hold.",
+                    "An account is a place money sits — a bank, a wallet, or the cash somebody is " +
+                        "carrying. Add or hide them on the Accounts tab of the sheet; a hidden one " +
+                        "disappears from here once its balance is nil.",
                     fontSize = 12.sp, color = Ink.muted, modifier = Modifier.padding(vertical = 10.dp),
                 )
                 Box(Modifier.size(90.dp))
