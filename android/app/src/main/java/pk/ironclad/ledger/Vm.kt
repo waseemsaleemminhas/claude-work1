@@ -155,6 +155,8 @@ data class Ui(
     val catQuery: String = "",
     /** The ring slice being asked about, by category name. */
     val picked: String = "",
+    /** Whose entries Records is showing; empty means everybody's. */
+    val who: String = "",
 )
 
 class Vm(app: Application) : AndroidViewModel(app) {
@@ -269,6 +271,9 @@ class Vm(app: Application) : AndroidViewModel(app) {
 
     /** Tapping a slice of the ring, or its label, asks what it is. */
     fun pickSlice(name: String) = set { it.copy(picked = name) }
+
+    /** Show one person's entries, or everybody's again. */
+    fun showWho(name: String) = set { it.copy(who = if (it.who == name) "" else name) }
 
     fun setDate(date: String) = set {
         it.copy(draft = it.draft?.copy(date = date), datePickerOpen = false)

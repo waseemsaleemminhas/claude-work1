@@ -283,6 +283,17 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
         ) { Text(saveLabel, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
 
         if (draft.editing) {
+            val who = state.entries.firstOrNull { it.id == draft.id }?.enteredBy.orEmpty()
+            if (who.isNotBlank()) {
+                Text(
+                    "Entered by " + who,
+                    fontSize = 11.sp, color = Ink.muted,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        }
+
+        if (draft.editing) {
             GhostButton(
                 if (draft.armed) "Tap again to void it" else "Void this entry",
                 colour = Ink.bad,

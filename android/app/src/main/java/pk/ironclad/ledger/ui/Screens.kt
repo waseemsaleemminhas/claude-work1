@@ -65,12 +65,14 @@ fun ScreenHeader(title: String, vm: Vm, trailing: @Composable () -> Unit = {}) {
 }
 
 /** Every voucher, newest first. */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
-    val entries = visibleEntries(state, ui).sortedWith(
+    val everything = visibleEntries(state, ui).sortedWith(
         compareByDescending<Entry> { it.date }.thenByDescending { it.at },
     )
+    val people = everything.map { it.enteredBy.trim() }.filter { it.isNotBlank() }.distinct().sorted()
+    val entries = if (ui.who.isBlank()) everything else everything.filter { it.enteredBy.trim() == ui.who }
     val totals = totalsOf(entries)
     val today = LocalDate.now()
 
@@ -80,10 +82,32 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
             Column {
                 ScreenHeader("Records", vm)
                 PeriodBar(vm, ui)
+                if (people.size > 1) {
+                    // Who spent it, and how much of it was theirs.
+                    FlowRow(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Chip("Everyone", ui.who.isBlank()) { vm.showWho("") }
+                        people.forEach { person ->
+                            val theirs = everything.filter { it.enteredBy.trim() == person }
+                            val out = totalsOf(theirs).outMinor
+                            Chip(
+                                person + "  " + state.money(out),
+                                ui.who == person,
+                            ) { vm.showWho(person) }
+                        }
+                    }
+                }
             }
         }
         if (entries.isEmpty()) {
-            item { Empty("Nothing in this period yet.\nTap PKR OUT or PKR IN to put something in.") }
+            item {
+                Empty(
+                    if (ui.who.isNotBlank()) ui.who + " has nothing in this period."
+                    else "Nothing in this period yet.\nTap PKR OUT or PKR IN to put something in.",
+                )
+            }
         }
         entries.groupBy { it.date }.forEach { (date, dayEntries) ->
             item {
@@ -133,6 +157,9 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
             Type.EXPENSE -> Ink.bad
             else -> Ink.muted
         },
+        // Whose entry this is. With two people keeping one book, this is the
+        // difference between a number and an account of what happened.
+        note = entry.enteredBy,
     ) { vm.openEntry(entry) }
 }
 
