@@ -122,6 +122,7 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
                 RingLabels(
                     slices, modeTotal, { state.money(it) }, ui.picked, { vm.pickSlice(it) },
                 )
+                BudgetsCard(vm, state, ui)
                 Box(Modifier.padding(bottom = 6.dp))
             }
         }
@@ -130,6 +131,9 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
             CategoryTile(
                 category, sums[category.name] ?: 0L, state,
                 highlight = ui.picked.isNotBlank() && ui.picked == category.name,
+                budget = category.budgetMinor,
+                monthSpent = if (category.budgetMinor > 0)
+                    spentInMonth(state, category.name, ui.anchor) else 0L,
             ) { vm.startEntry(category.kind, category.name) }
         }
 
@@ -160,6 +164,8 @@ private fun CategoryTile(
     amount: Long,
     state: LedgerState,
     highlight: Boolean,
+    budget: Long = 0,
+    monthSpent: Long = 0,
     onClick: () -> Unit,
 ) {
     // Every category already carries a colour in the book. Using it makes the
@@ -193,6 +199,82 @@ private fun CategoryTile(
             fontWeight = if (amount > 0) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
+        if (budget > 0) {
+            val share = monthSpent.toFloat() / budget.toFloat()
+            BudgetBar(share, Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp), thickness = 4)
+        }
+    }
+}
+
+/**
+ * The budgets from the Categories tab of the sheet, against what has gone this
+ * month. Worst off first, because that is the one you need to know about. The
+ * card is not here at all until a budget is set, so nobody who does not use
+ * them has to look at it.
+ */
+@Composable
+private fun BudgetsCard(vm: Vm, state: LedgerState, ui: Ui) {
+    val month = ui.anchor
+    val rows = budgets(state, month)
+    if (rows.isEmpty()) return
+
+    val budgeted = rows.sumOf { it.budgetMinor }
+    val spent = rows.sumOf { it.spentMinor }
+    val over = rows.count { it.over }
+
+    Column(
+        Modifier.fillMaxWidth().padding(top = 10.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Ink.card)
+            .border(BorderStroke(1.dp, if (over > 0) Ink.bad.copy(alpha = 0.5f) else Ink.line),
+                RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "BUDGETS · " + Period.monthName(month).uppercase(),
+                fontSize = 10.sp, color = Ink.muted, modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (over > 0) over.toString() + (if (over == 1) " over" else " over") else "all within",
+                fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                color = if (over > 0) Ink.bad else Ink.good,
+            )
+        }
+        Text(
+            state.money(spent) + " of " + state.money(budgeted),
+            fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink.text,
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+        )
+        rows.take(6).forEach { row ->
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { vm.startEntry(row.category.kind, row.category.name) }
+                    .padding(vertical = 5.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(row.category.icon + "  " + row.category.name, fontSize = 12.sp,
+                        color = Ink.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f))
+                    Text(
+                        if (row.over) state.money(-row.leftMinor) + " over"
+                        else state.money(row.leftMinor) + " left",
+                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                        color = budgetColour(row.share),
+                    )
+                }
+                BudgetBar(row.share, Modifier.padding(top = 4.dp))
+                Text(
+                    state.money(row.spentMinor) + " of " + state.money(row.budgetMinor),
+                    fontSize = 10.sp, color = Ink.muted, modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        if (rows.size > 6) {
+            Text("and " + (rows.size - 6) + " more with budgets set",
+                fontSize = 10.sp, color = Ink.muted, modifier = Modifier.padding(top = 4.dp))
+        }
     }
 }
 

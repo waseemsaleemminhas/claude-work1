@@ -226,6 +226,36 @@ fun InOutBar(inMinor: Long, outMinor: Long, money: (Long) -> String, modifier: M
     }
 }
 
+/** Green while there is room, amber as it runs out, red once it is past. */
+fun budgetColour(share: Float): Color = when {
+    share > 1f -> Ink.bad
+    share >= 0.8f -> Ink.warn
+    else -> Ink.good
+}
+
+/** How much of a budget has gone, drawn as a line you can read at a glance. */
+@Composable
+fun BudgetBar(share: Float, modifier: Modifier = Modifier, thickness: Int = 6) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(thickness.dp)
+            .clip(RoundedCornerShape((thickness / 2).dp))
+            .background(Ink.card2),
+    ) {
+        Box(
+            Modifier.fillMaxHeight()
+                .fillMaxWidth(share.coerceIn(0f, 1f))
+                .clip(RoundedCornerShape((thickness / 2).dp))
+                .background(budgetColour(share)),
+        )
+        if (share > 1f) {
+            // past the limit: the whole line goes red, so it cannot be missed
+            Box(Modifier.fillMaxSize().clip(RoundedCornerShape((thickness / 2).dp)).background(Ink.bad))
+        }
+    }
+}
+
 @Composable
 fun Chip(text: String, selected: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
@@ -316,6 +346,10 @@ fun Empty(text: String) {
 
 /** Which days the screen is showing, and what to call them. */
 object Period {
+    /** "October" — what the budget card puts above the bars. */
+    fun monthName(day: LocalDate): String =
+        day.month.getDisplayName(TextStyle.FULL, Locale.UK)
+
     fun range(unit: String, anchor: LocalDate): Pair<LocalDate, LocalDate> = when (unit) {
         "day" -> anchor to anchor
         "week" -> {

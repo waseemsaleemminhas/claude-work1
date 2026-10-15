@@ -45,13 +45,32 @@ fun byCategory(entries: List<Entry>, type: String): Map<String, Long> {
     return out
 }
 
-/** This month's spend on one category, for the budget bars. */
-fun spentThisMonth(state: LedgerState, category: String, today: LocalDate): Long {
-    val from = today.withDayOfMonth(1).toString()
-    val to = today.withDayOfMonth(today.lengthOfMonth()).toString()
+/**
+ * Spend on one category in the month [day] falls in. A budget is a monthly
+ * figure, so the bar always talks about a whole month however the screen is
+ * being browsed — a week in October is measured against October's budget.
+ */
+fun spentInMonth(state: LedgerState, category: String, day: LocalDate): Long {
+    val from = day.withDayOfMonth(1).toString()
+    val to = day.withDayOfMonth(day.lengthOfMonth()).toString()
     return state.entries
-        .filter { it.status != Status.VOID && it.date >= from && it.date <= to }
+        .filter { it.status != Status.VOID && it.type == Type.EXPENSE }
+        .filter { it.date >= from && it.date <= to }
         .flatMap { it.lines }
         .filter { it.category == category }
         .sumOf { it.amountMinor }
+}
+
+/** The categories carrying a budget, worst off first. */
+fun budgets(state: LedgerState, day: LocalDate): List<Budgeted> =
+    state.categories
+        .filter { it.budgetMinor > 0 && !it.archived && it.mergedInto.isBlank() }
+        .map { Budgeted(it, spentInMonth(state, it.name, day)) }
+        .sortedWith(compareByDescending<Budgeted> { it.share }.thenBy { it.category.sort })
+
+data class Budgeted(val category: pk.ironclad.ledger.data.Category, val spentMinor: Long) {
+    val budgetMinor: Long get() = category.budgetMinor
+    val leftMinor: Long get() = budgetMinor - spentMinor
+    val share: Float get() = if (budgetMinor <= 0) 0f else spentMinor.toFloat() / budgetMinor.toFloat()
+    val over: Boolean get() = spentMinor > budgetMinor
 }
