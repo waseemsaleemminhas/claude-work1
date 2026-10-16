@@ -107,7 +107,8 @@ class PeopleTest {
             }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("Anas").assertExists()
+        // the name is there whether or not the entry has reached the book yet
+        compose.onNodeWithText("Anas", substring = true).assertExists()
         compose.onNodeWithText("Headsets").assertExists()
         Unit
     }

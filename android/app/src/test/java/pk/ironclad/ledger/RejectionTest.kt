@@ -133,13 +133,13 @@ class RejectionTest {
             LedgerTheme { pk.ironclad.ledger.ui.EntryRow(vm, state, ui, entry) }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("not sent yet").assertExists()
+        compose.onNodeWithText("waiting", substring = true).assertExists()
 
         // what the view model does when a sync comes back with a refusal
         vm.set { it.copy(refused = mapOf(entry.id to "Line 1: pick a category.")) }
         shadowOf(Looper.getMainLooper()).idle()
         compose.waitForIdle()
-        compose.onNodeWithText("not accepted").assertExists()
+        compose.onNodeWithText("not accepted", substring = true).assertExists()
         compose.onNodeWithText("pick a category", substring = true).assertExists()
         Unit
     }

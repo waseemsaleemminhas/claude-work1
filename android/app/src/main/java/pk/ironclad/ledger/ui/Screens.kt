@@ -199,9 +199,12 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
         },
         // Whose entry this is. With two people keeping one book, this is the
         // difference between a number and an account of what happened.
+        // The name stays whatever else is true of the entry: who wrote it is
+        // the thing being read every day, and everything is "waiting" for a
+        // while after it is written.
         note = when {
-            refused != null -> "not accepted"
-            waiting -> "not sent yet"
+            refused != null -> entry.enteredBy.ifBlank { "someone" } + " · not accepted"
+            waiting -> entry.enteredBy.ifBlank { "someone" } + " · waiting"
             else -> entry.enteredBy
         },
         warn = refused != null,
