@@ -105,9 +105,10 @@ class ScreenTest {
         start()
         compose.onNodeWithText("MONEY OUT").assertIsDisplayed()
         compose.onNodeWithText("Records").assertIsDisplayed()
+        // the ring and its words come first, before scrolling past them
+        compose.onNodeWithText("Money we hold").assertExists()
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Generator fuel"))
         compose.onNodeWithText("Generator fuel").assertExists()
-        compose.onNodeWithText("Money we hold").assertExists()
     }
 
     @Test

@@ -114,9 +114,11 @@ class ChartTest {
             }
         }
         compose.waitForIdle()
-        listOf("Rent", "Salaries", "Internet", "Fuel").forEach {
+        // the top three are spelled out; the rest are a tap on the ring away
+        listOf("Rent", "Salaries", "Internet").forEach {
             compose.onNodeWithText(it, substring = true).assertExists()
         }
+        compose.onNodeWithText("and 1 more", substring = true).assertExists()
         compose.onAllNodesWithText("25%")[0].assertExists()
     }
 

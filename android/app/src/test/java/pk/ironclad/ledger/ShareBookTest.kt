@@ -94,16 +94,24 @@ class ShareBookTest {
         val mirrored = seeded.take(5).mapIndexed { i, c ->
             c.copy(id = "cserver$i")  // the sheet mints its own ids for the same names
         }
+        val howManyAccounts = settle().accounts.size
         val accountsBack = settle().accounts.take(2).mapIndexed { i, a -> a.copy(id = "aserver$i") }
         repo.acceptFromServer(emptyList(), mirrored, accountsBack.map { Account(it.id, it.name, it.kind) })
 
-        val after = settle { state -> state.categories.any { it.id == "cserver0" } }
+        // wait for the whole arrival: their copies in, our stand-ins gone
+        val after = settle { state ->
+            mirrored.all { theirs -> state.categories.count { it.name == theirs.name } == 1 } &&
+                accountsBack.all { theirs -> state.accounts.count { it.name == theirs.name } == 1 } &&
+                state.categories.any { it.id == "cserver0" }
+        }
         assertEquals("still one chart of accounts", seeded.size, after.categories.size)
         mirrored.forEach { theirs ->
             assertEquals("one ${theirs.name}", 1, after.categories.count { it.name == theirs.name })
         }
-        assertEquals("and the accounts stayed put too", settle().accounts.size,
-            after.accounts.size.coerceAtLeast(after.accounts.size))
+        assertEquals("and the same number of accounts as before", howManyAccounts, after.accounts.size)
+        accountsBack.forEach { theirs ->
+            assertEquals("one ${theirs.name}", 1, after.accounts.count { it.name == theirs.name })
+        }
     }
 
     @Test
