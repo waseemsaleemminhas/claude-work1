@@ -30,6 +30,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import pk.ironclad.ledger.data.Account
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
@@ -82,6 +88,19 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
             Column {
                 ScreenHeader("Records", vm)
                 PeriodBar(vm, ui)
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    InlineAction("＋  Money out", Ink.bad, Modifier.weight(1f)) {
+                        vm.startEntry(Type.EXPENSE)
+                    }
+                    InlineAction("＋  Money in", Ink.good, Modifier.weight(1f)) {
+                        vm.startEntry(Type.INCOME)
+                    }
+                    InlineAction("Export", Ink.brand) { vm.exportSpreadsheet() }
+                }
+
                 if (people.size > 1) {
                     // Who spent it, and how much of it was theirs.
                     FlowRow(
@@ -130,10 +149,18 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
     }
 
     // The two numbers that matter, to scale, wherever you have scrolled to.
-    InOutBar(
-        totals.inMinor, totals.outMinor, { state.money(it) },
+    Column(
         Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp),
-    )
+    ) {
+        Text(
+            (if (ui.who.isBlank()) "Everyone" else ui.who) + " · " +
+                Period.label(ui.unit, ui.anchor, today) + " · " + entries.size +
+                (if (entries.size == 1) " voucher" else " vouchers"),
+            fontSize = 10.sp, color = Ink.muted,
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+        )
+        InOutBar(totals.inMinor, totals.outMinor, { state.money(it) })
+    }
     }
 }
 
@@ -163,6 +190,66 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
     ) { vm.openEntry(entry) }
 }
 
+/** One account: whose it is, what is in it, and what you can do with it. */
+@Composable
+private fun AccountCard(vm: Vm, state: LedgerState, account: Account, stranded: Boolean) {
+    val colour = hexColour(account.colour)
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 10.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.verticalGradient(listOf(colour.copy(alpha = 0.16f), Ink.card)))
+            .border(
+                BorderStroke(1.dp, if (stranded) Ink.warn else colour.copy(alpha = 0.3f)),
+                RoundedCornerShape(18.dp),
+            )
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(colour.copy(alpha = 0.26f)),
+                contentAlignment = Alignment.Center,
+            ) { Text(account.icon, fontSize = 19.sp) }
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Text(
+                    account.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink.text,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    account.kind + if (account.heldBy.isNotBlank()) " · held by " + account.heldBy else "",
+                    fontSize = 11.sp, color = Ink.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    state.money(account.balanceMinor), fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                    color = when {
+                        account.balanceMinor < 0 -> Ink.bad
+                        stranded -> Ink.warn
+                        else -> Ink.text
+                    },
+                )
+                Text("in hand", fontSize = 10.sp, color = Ink.muted)
+            }
+        }
+        if (stranded) {
+            Text(
+                "Hidden on the sheet but still holding money. Move it out and it will go.",
+                fontSize = 11.sp, color = Ink.warn, modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            InlineAction("Move money", Ink.brand, Modifier.weight(1f)) { vm.startEntry(Type.TRANSFER) }
+            InlineAction("Spend from here", Ink.bad, Modifier.weight(1f)) {
+                vm.startEntry(Type.EXPENSE)
+                vm.editDraft { it.copy(account = account.name) }
+            }
+        }
+    }
+}
+
 /** Money we hold, including what people are carrying. */
 @Composable
 fun AccountsScreen(vm: Vm, state: LedgerState) {
@@ -170,15 +257,15 @@ fun AccountsScreen(vm: Vm, state: LedgerState) {
         item {
             Column {
                 ScreenHeader("Money we hold", vm)
-                Card(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-                    Column {
-                        Text("EVERYTHING TOGETHER", fontSize = 10.sp, color = Ink.muted)
-                        Text(
-                            state.money(state.totalHeldMinor), fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (state.totalHeldMinor < 0) Ink.bad else Ink.text,
-                        )
-                    }
+                HeroCard(
+                    label = "Everything together",
+                    value = state.money(state.totalHeldMinor),
+                    valueColour = if (state.totalHeldMinor < 0) Ink.bad else Ink.text,
+                    accent = if (state.totalHeldMinor < 0) Ink.bad else Ink.good,
+                    footnote = state.liveAccounts.size.toString() + " accounts · tap one to move money",
+                    modifier = Modifier.padding(bottom = 12.dp),
+                ) {
+                    InlineAction("Move money", Ink.brand) { vm.startEntry(Type.TRANSFER) }
                 }
             }
         }
@@ -189,24 +276,10 @@ fun AccountsScreen(vm: Vm, state: LedgerState) {
         items(shown.size) { i ->
             val account = shown[i]
             val stranded = account.archived && account.balanceMinor != 0L
-            ListRow(
-                icon = account.icon,
-                colour = hexColour(account.colour),
-                title = account.name + if (stranded) "  (hidden — still holds money)" else "",
-                subtitle = account.kind + if (account.heldBy.isNotBlank()) " · held by ${account.heldBy}" else "",
-                amount = state.money(account.balanceMinor),
-                amountColour = when {
-                    account.balanceMinor < 0 -> Ink.bad
-                    stranded -> Ink.warn
-                    else -> Ink.text
-                },
-                note = if (stranded) "move it out" else "",
-                warn = stranded,
-            ) { vm.startEntry(Type.TRANSFER) }
+            AccountCard(vm, state, account, stranded)
         }
         item {
             Column {
-                GhostButton("Move money between accounts") { vm.startEntry(Type.TRANSFER) }
                 Text(
                     "An account is a place money sits — a bank, a wallet, or the cash somebody is " +
                         "carrying. Add or hide them on the Accounts tab of the sheet; a hidden one " +

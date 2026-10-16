@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -139,7 +142,12 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
     }
 
     Box(Modifier.fillMaxSize().background(Ink.bg)) {
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
+        Column(
+            Modifier.fillMaxSize().windowInsetsPadding(
+                // the dock pads the bottom itself, so not here
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+            ),
+        ) {
             Box(Modifier.weight(1f)) {
                 when {
                     !state.ready -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -171,9 +179,10 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
         BackHandler { vm.tryClose() }
         Surface(Modifier.fillMaxSize(), color = Ink.bg, contentColor = Ink.text) {
             Column(
-                Modifier.fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .imePadding(),
+                // safeDrawing is the lot: status bar, notch, gesture bar, and the
+                // keyboard when it is up. The keypad was sitting under the gesture
+                // bar without it.
+                Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
             ) {
                 EntryTitle(vm, draft)
                 if (ui.toast.isNotBlank()) SheetMessage(ui.toast)
@@ -354,7 +363,7 @@ fun CrashScreen(report: String, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     Column(
         Modifier.fillMaxSize().background(Ink.bg)
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(16.dp),
     ) {
         Text("The app stopped last time", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink.text)
@@ -385,7 +394,7 @@ fun CrashScreen(report: String, onDismiss: () -> Unit) {
 fun Dock(vm: Vm, ui: Ui) {
     Row(
         modifier = Modifier.fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),

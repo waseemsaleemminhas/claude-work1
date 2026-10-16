@@ -73,6 +73,25 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
                         vm.set { it.copy(mode = Type.EXPENSE) }
                     }
                 }
+                // Who is holding what. With two people this is the line that
+                // answers "can Anas pay for this?" without opening anything.
+                if (state.liveAccounts.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        state.liveAccounts.take(3).forEach { account ->
+                            BalanceTile(
+                                who = account.heldBy.ifBlank { account.name },
+                                what = if (account.heldBy.isBlank()) account.kind else account.name,
+                                amount = state.money(account.balanceMinor),
+                                accent = hexColour(account.colour),
+                                modifier = Modifier.weight(1f),
+                            ) { vm.go(Screen.ACCOUNTS) }
+                        }
+                    }
+                }
+
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Ring(
                         slices, modeTotal, Modifier.fillMaxWidth(0.72f),

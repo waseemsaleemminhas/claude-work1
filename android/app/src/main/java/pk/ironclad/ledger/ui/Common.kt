@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -187,10 +188,12 @@ fun InOutBar(inMinor: Long, outMinor: Long, money: (Long) -> String, modifier: M
     val most = maxOf(inMinor, outMinor, 1L).toFloat()
     Column(
         modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Ink.card)
-            .border(BorderStroke(1.dp, Ink.line), RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.verticalGradient(listOf(Ink.card2, Ink.card)),
+            )
+            .border(BorderStroke(1.dp, Ink.line), RoundedCornerShape(18.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         listOf(
             Triple("PKR IN", inMinor, Ink.good),
@@ -281,6 +284,108 @@ fun Card(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     ) { content() }
 }
 
+/**
+ * The card a screen opens with: a wash of colour behind a big number, so the
+ * figure that matters is the first thing the eye lands on.
+ */
+@Composable
+fun HeroCard(
+    label: String,
+    value: String,
+    valueColour: Color = Ink.text,
+    accent: Color = Ink.brand,
+    footnote: String = "",
+    modifier: Modifier = Modifier,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(accent.copy(alpha = 0.26f), Ink.card),
+                ),
+            )
+            .border(BorderStroke(1.dp, accent.copy(alpha = 0.35f)), RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Text(label.uppercase(), fontSize = 10.sp, letterSpacing = 1.sp, color = Ink.muted)
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = valueColour,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            trailing?.invoke()
+        }
+        if (footnote.isNotBlank()) {
+            Text(footnote, fontSize = 11.sp, color = Ink.muted, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+/** One person's money, small enough to sit beside the others. */
+@Composable
+fun BalanceTile(
+    who: String,
+    what: String,
+    amount: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.2f), Ink.card)))
+            .border(BorderStroke(1.dp, accent.copy(alpha = 0.3f)), RoundedCornerShape(16.dp))
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(22.dp).clip(CircleShape).background(accent.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    who.take(1).uppercase(), fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold, color = Ink.text,
+                )
+            }
+            Text(
+                who, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink.text,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 7.dp),
+            )
+        }
+        Text(
+            amount, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+            color = if (amount.startsWith("-")) Ink.bad else Ink.text,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (what.isNotBlank()) {
+            Text(what, fontSize = 10.sp, color = Ink.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** A small button that lives inside a card. */
+@Composable
+fun InlineAction(text: String, colour: Color = Ink.brand, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(colour.copy(alpha = 0.16f))
+            .border(BorderStroke(1.dp, colour.copy(alpha = 0.45f)), RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colour, maxLines = 1)
+    }
+}
+
 /** The list row used everywhere: icon bubble, two lines of words, an amount. */
 @Composable
 fun ListRow(
@@ -298,9 +403,9 @@ fun ListRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(Ink.card)
-            .border(BorderStroke(1.dp, if (warn) Ink.warn.copy(alpha = 0.5f) else Ink.line), RoundedCornerShape(14.dp))
+            .border(BorderStroke(1.dp, if (warn) Ink.warn.copy(alpha = 0.5f) else Ink.line), RoundedCornerShape(16.dp))
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -329,11 +434,20 @@ fun ListRow(
 @Composable
 fun SectionLabel(left: String, right: String = "") {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp, start = 4.dp, end = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 8.dp, start = 4.dp, end = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(left, fontSize = 12.sp, color = Ink.muted)
-        if (right.isNotBlank()) Text(right, fontSize = 12.sp, color = Ink.muted)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Box(Modifier.size(3.dp, 14.dp).clip(RoundedCornerShape(2.dp)).background(Ink.brand))
+            Text(
+                left, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink.text,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        if (right.isNotBlank()) {
+            Text(right, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink.muted)
+        }
     }
 }
 
