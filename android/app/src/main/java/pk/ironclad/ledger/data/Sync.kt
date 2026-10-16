@@ -108,14 +108,26 @@ object Sync {
 
         // What the book refused, and why, in its own words. Counting them and
         // keeping the reason to ourselves leaves somebody staring at a number.
-        lastRejected = answer.rejected
-        repo.setPref("lastRejected", rejectionNote(answer.rejected))
+        // A voided entry the book never had is not a problem to keep raising:
+        // we asked for it gone, it was never there, and that is the end we
+        // wanted. Settle it here so the phone stops asking every sync. (The
+        // book says yes to these itself once the script is re-deployed; this
+        // clears the ones already stuck.)
+        val settled = answer.rejected.filter { (id, why) ->
+            why.contains("No such entry", ignoreCase = true) &&
+                mine.firstOrNull { it.id == id }?.status == Status.VOID
+        }.keys.toList()
+        if (settled.isNotEmpty()) repo.markSynced(settled)
 
-        val pushed = answer.accepted.size
+        val stillWrong = answer.rejected - settled.toSet()
+        lastRejected = stillWrong
+        repo.setPref("lastRejected", rejectionNote(stillWrong))
+
+        val pushed = answer.accepted.size + settled.size
         val pulled = answer.entries.size
         when {
-            answer.rejected.isNotEmpty() ->
-                "Sent $pushed, took back $pulled. " + rejectionNote(answer.rejected)
+            stillWrong.isNotEmpty() ->
+                "Sent $pushed, took back $pulled. " + rejectionNote(stillWrong)
             pushed == 0 && pulled == 0 && answer.addedCategories.isEmpty() -> "Already up to date."
             answer.addedCategories.isNotEmpty() ->
                 "Sent $pushed, took back $pulled, and ${answer.addedCategories.size} new " +

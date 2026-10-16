@@ -96,6 +96,38 @@ class RejectionTest {
     }
 
     @Test
+    fun `a void the book never had is settled rather than asked again`() = runBlocking {
+        settle()
+        repo.save(
+            Entry(
+                id = "", date = repo.today(), type = Type.EXPENSE, account = "Petty cash",
+                lines = listOf(Line(category = "Headsets", amountMinor = 125000)),
+            ),
+        )
+        settle { repo.state.value.entries.isNotEmpty() }
+        val entry = repo.state.value.entries.first()
+        repo.void(entry.id)
+        settle { repo.state.value.entries.first().status == pk.ironclad.ledger.data.Status.VOID }
+        assertTrue("still waiting to go up", entry.id in repo.state.value.unsent)
+
+        // what the book says about a voided entry it never received
+        val refused = mapOf(entry.id to "No such entry here.")
+        val voided = repo.dirtyEntries().filter { it.status == pk.ironclad.ledger.data.Status.VOID }
+        assertEquals("ours is the voided one", 1, voided.size)
+
+        val settledIds = refused.filter { (id, why) ->
+            why.contains("No such entry", ignoreCase = true) &&
+                voided.any { it.id == id }
+        }.keys.toList()
+        assertEquals("it is one we can settle ourselves", listOf(entry.id), settledIds)
+
+        repo.markSynced(settledIds)
+        settle { repo.state.value.unsent.isEmpty() }
+        assertTrue("and it stops being asked about", repo.state.value.unsent.isEmpty())
+        assertEquals("the voided entry is still here to read", 1, repo.state.value.entries.size)
+    }
+
+    @Test
     fun `an entry that has not gone up yet is known to be waiting`() = runBlocking {
         settle()
         repo.save(

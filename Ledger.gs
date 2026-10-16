@@ -3357,7 +3357,10 @@ function syncLedger_(req) {
 
       // a phone can void an entry while it is offline
       if (txt_(sent.status, 20) === ST_VOID) {
-        if (!rowNumber) { rejected[id] = 'No such entry here.'; return; }
+        // Written and then voided before it ever got here: there is nothing to
+        // strike out, and the end the phone is asking for is already true. Say
+        // yes, or the phone asks again on every sync for ever.
+        if (!rowNumber) { accepted.push(id); return; }
         t.sh.getRange(rowNumber, t.col('Status')).setValue(ST_VOID);
         t.sh.getRange(rowNumber, t.col('Voided By')).setValue(person.email || person.name);
         t.sh.getRange(rowNumber, t.col('Voided At')).setValue(new Date());
