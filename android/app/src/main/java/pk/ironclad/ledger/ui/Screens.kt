@@ -152,13 +152,24 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
     Column(
         Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        Text(
-            (if (ui.who.isBlank()) "Everyone" else ui.who) + " · " +
-                Period.label(ui.unit, ui.anchor, today) + " · " + entries.size +
-                (if (entries.size == 1) " voucher" else " vouchers"),
-            fontSize = 10.sp, color = Ink.muted,
-            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
-        )
+        val waiting = entries.count { it.id in state.unsent }
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 4.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                (if (ui.who.isBlank()) "Everyone" else ui.who) + " · " +
+                    Period.label(ui.unit, ui.anchor, today) + " · " + entries.size +
+                    (if (entries.size == 1) " voucher" else " vouchers"),
+                fontSize = 10.sp, color = Ink.muted, modifier = Modifier.weight(1f),
+            )
+            if (waiting > 0) {
+                Text(
+                    waiting.toString() + " waiting to go up",
+                    fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Ink.warn,
+                )
+            }
+        }
         InOutBar(totals.inMinor, totals.outMinor, { state.money(it) })
     }
     }
@@ -166,7 +177,8 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
 
 @Composable
 fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
-    val refused = pk.ironclad.ledger.data.Sync.lastRejected[entry.id]
+    val refused = ui.refused[entry.id]
+    val waiting = entry.id in state.unsent
     val first = entry.lines.firstOrNull()
     val category = first?.let { state.category(it.category) }
     val transfer = entry.type == Type.TRANSFER
@@ -187,12 +199,16 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
         },
         // Whose entry this is. With two people keeping one book, this is the
         // difference between a number and an account of what happened.
-        note = if (refused != null) "not accepted" else entry.enteredBy,
+        note = when {
+            refused != null -> "not accepted"
+            waiting -> "not sent yet"
+            else -> entry.enteredBy
+        },
         warn = refused != null,
     ) { vm.openEntry(entry) }
     if (refused != null) {
         Text(
-            refused,
+            "⚠  " + refused,
             fontSize = 11.sp, color = Ink.warn,
             modifier = Modifier.padding(start = 14.dp, bottom = 8.dp, end = 14.dp),
         )

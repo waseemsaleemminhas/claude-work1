@@ -32,6 +32,8 @@ data class Prefs(
 data class LedgerState(
     val ready: Boolean = false,
     val entries: List<Entry> = emptyList(),
+    /** Entries still waiting to reach the shared book. */
+    val unsent: Set<String> = emptySet(),
     val categories: List<Category> = emptyList(),
     val accounts: List<Account> = emptyList(),
     val prefs: Prefs = Prefs(),
@@ -61,15 +63,19 @@ class Repo private constructor(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val state: StateFlow<LedgerState> = combine(
-        dao.watchEntries().map { rows -> rows.map { it.toEntry() } },
+        dao.watchEntries().map { rows ->
+            rows.map { it.toEntry() } to rows.filter { it.dirty }.map { it.id }.toSet()
+        },
         dao.watchCategories().map { rows -> rows.map { it.toCategory() } },
         dao.watchAccounts().map { rows -> rows.map { it.toAccount() } },
         dao.watchMeta(),
-    ) { entries, categories, accounts, meta ->
+    ) { both, categories, accounts, meta ->
+        val (entries, unsent) = both
         val map = meta.associate { it.key to it.value }
         LedgerState(
             ready = categories.isNotEmpty(),
             entries = entries,
+            unsent = unsent,
             categories = categories,
             accounts = withBalances(accounts, entries),
             prefs = Prefs(

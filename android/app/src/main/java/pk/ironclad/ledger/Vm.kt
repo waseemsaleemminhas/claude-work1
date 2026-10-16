@@ -157,6 +157,8 @@ data class Ui(
     val picked: String = "",
     /** Whose entries Records is showing; empty means everybody's. */
     val who: String = "",
+    /** Why the book turned an entry down, by entry id, from the last sync. */
+    val refused: Map<String, String> = emptyMap(),
 )
 
 class Vm(app: Application) : AndroidViewModel(app) {
@@ -381,7 +383,9 @@ class Vm(app: Application) : AndroidViewModel(app) {
         set { it.copy(syncing = true) }
         viewModelScope.launch {
             val result = try {
-                Sync.runOnce(getApplication())
+                Sync.runOnce(getApplication()).also {
+                    set { ui -> ui.copy(refused = Sync.lastRejected) }
+                }
             } catch (failure: Throwable) {
                 Crash.note(getApplication(), "sync", failure)
                 "Sync did not work: " + (failure.message ?: failure.javaClass.simpleName)
