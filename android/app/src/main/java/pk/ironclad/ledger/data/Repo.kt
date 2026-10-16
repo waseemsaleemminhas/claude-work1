@@ -213,7 +213,9 @@ class Repo private constructor(context: Context) {
                     }
                 }
             }
-            return accounts.map { it.also { a -> a.balanceMinor = by[a.name] ?: a.openingMinor } }
+            // A fresh object per reckoning: the balance is a var, and handing the
+            // same instance to two of these would let one overwrite the other.
+            return accounts.map { it.copy().also { a -> a.balanceMinor = by[a.name] ?: a.openingMinor } }
         }
     }
 }

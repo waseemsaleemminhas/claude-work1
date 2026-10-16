@@ -141,7 +141,14 @@ class AccountsTest {
                 account = "Petty cash", toAccount = "Cash — Waseem",
             ),
         )
-        settle { repo.state.value.entries.isNotEmpty() }
+        // Room can deliver a snapshot of the accounts taken before the move and
+        // one of the entries taken after it, so the sum is briefly wrong before
+        // settling. The app corrects itself in milliseconds; the test waits for
+        // the state it promises rather than the first one it sees.
+        settle {
+            val now = repo.state.value
+            now.entries.isNotEmpty() && now.accounts.firstOrNull { it.name == "Petty cash" }?.balanceMinor == 0L
+        }
 
         val held = repo.state.value.accounts.associate { it.name to it.balanceMinor }
         assertEquals("emptied", 0L, held["Petty cash"])
