@@ -55,6 +55,23 @@ object Sync {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+    /** The last sync's refusals, by entry id, so the screens can point at them. */
+    @Volatile
+    var lastRejected: Map<String, String> = emptyMap()
+        private set
+
+    /**
+     * The reasons the book gave, each said once however many entries hit it:
+     * "2 entries turned down — Line 1: pick a category."
+     */
+    fun rejectionNote(rejected: Map<String, String>): String {
+        if (rejected.isEmpty()) return ""
+        val reasons = rejected.values.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        val head = rejected.size.toString() +
+            (if (rejected.size == 1) " entry" else " entries") + " turned down"
+        return if (reasons.isEmpty()) head + ", with no reason given." else head + " — " + reasons.joinToString("  ")
+    }
+
     suspend fun runOnce(context: Context): String = withContext(Dispatchers.IO) {
         val repo = Repo.get(context)
         val prefs = repo.state.value.prefs
@@ -89,11 +106,16 @@ object Sync {
         if (answer.sheetUrl.isNotBlank()) repo.setPref("sheetUrl", answer.sheetUrl)
         pk.ironclad.ledger.QuickEntryWidget.refresh(context)
 
+        // What the book refused, and why, in its own words. Counting them and
+        // keeping the reason to ourselves leaves somebody staring at a number.
+        lastRejected = answer.rejected
+        repo.setPref("lastRejected", rejectionNote(answer.rejected))
+
         val pushed = answer.accepted.size
         val pulled = answer.entries.size
         when {
             answer.rejected.isNotEmpty() ->
-                "Sent $pushed, took back $pulled, ${answer.rejected.size} the server would not take."
+                "Sent $pushed, took back $pulled. " + rejectionNote(answer.rejected)
             pushed == 0 && pulled == 0 && answer.addedCategories.isEmpty() -> "Already up to date."
             answer.addedCategories.isNotEmpty() ->
                 "Sent $pushed, took back $pulled, and ${answer.addedCategories.size} new " +

@@ -166,6 +166,7 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
 
 @Composable
 fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
+    val refused = pk.ironclad.ledger.data.Sync.lastRejected[entry.id]
     val first = entry.lines.firstOrNull()
     val category = first?.let { state.category(it.category) }
     val transfer = entry.type == Type.TRANSFER
@@ -186,8 +187,16 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
         },
         // Whose entry this is. With two people keeping one book, this is the
         // difference between a number and an account of what happened.
-        note = entry.enteredBy,
+        note = if (refused != null) "not accepted" else entry.enteredBy,
+        warn = refused != null,
     ) { vm.openEntry(entry) }
+    if (refused != null) {
+        Text(
+            refused,
+            fontSize = 11.sp, color = Ink.warn,
+            modifier = Modifier.padding(start = 14.dp, bottom = 8.dp, end = 14.dp),
+        )
+    }
 }
 
 /** One account: whose it is, what is in it, and what you can do with it. */
@@ -338,6 +347,29 @@ fun SettingsScreen(vm: Vm, state: LedgerState) {
                     if (state.prefs.lastSync == 0L) "Never synced yet." else "Last synced with the sheet.",
                     fontSize = 11.sp, color = Ink.muted, modifier = Modifier.padding(top = 6.dp),
                 )
+                if (state.prefs.lastRejected.isNotBlank()) {
+                    Spacer(Modifier.size(8.dp))
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Ink.warn.copy(alpha = 0.14f))
+                            .padding(10.dp),
+                    ) {
+                        Text(
+                            "The last sync left something behind",
+                            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink.warn,
+                        )
+                        Text(
+                            state.prefs.lastRejected,
+                            fontSize = 12.sp, color = Ink.text, modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Text(
+                            "Those entries are still on this phone, marked in Records. Fix what the " +
+                                "book objected to and they will go up on the next sync.",
+                            fontSize = 11.sp, color = Ink.muted, modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
                 if (state.prefs.sheetUrl.isNotBlank()) {
                     Spacer(Modifier.size(8.dp))
                     OutlinedButton(
