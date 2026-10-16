@@ -94,7 +94,7 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
 
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Ring(
-                        slices, modeTotal, Modifier.fillMaxWidth(0.72f),
+                        slices, modeTotal, Modifier.fillMaxWidth(0.62f),
                         picked = ui.picked, onPick = { vm.pickSlice(it) },
                     ) {
                         if (picked != null) {

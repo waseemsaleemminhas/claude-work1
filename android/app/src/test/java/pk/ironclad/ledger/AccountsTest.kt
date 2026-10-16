@@ -121,8 +121,8 @@ class AccountsTest {
             LedgerTheme { pk.ironclad.ledger.ui.AccountsScreen(vm, repo.state.value) }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("still holds money", substring = true).assertExists()
-        compose.onNodeWithText("move it out", substring = true).assertExists()
+        compose.onNodeWithText("still holding money", substring = true).assertExists()
+        compose.onNodeWithText("Move it out and it will go", substring = true).assertExists()
         Unit
     }
 

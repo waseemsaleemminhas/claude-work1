@@ -6,6 +6,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -102,6 +105,7 @@ class ScreenTest {
         start()
         compose.onNodeWithText("MONEY OUT").assertIsDisplayed()
         compose.onNodeWithText("Records").assertIsDisplayed()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Generator fuel"))
         compose.onNodeWithText("Generator fuel").assertExists()
         compose.onNodeWithText("Money we hold").assertExists()
     }
@@ -145,6 +149,7 @@ class ScreenTest {
         waitForLedger()
         start()
 
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Generator fuel"))
         compose.onNodeWithText("Generator fuel").performClick()
         pump()
         listOf("1", "8", "6", "0").forEach { tapInSheet(it) }

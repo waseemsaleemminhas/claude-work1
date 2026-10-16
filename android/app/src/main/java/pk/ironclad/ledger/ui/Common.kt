@@ -144,7 +144,7 @@ fun RingLabels(
 ) {
     if (slices.isEmpty() || total <= 0) return
     Column(modifier.fillMaxWidth().padding(top = 8.dp)) {
-        slices.take(5).forEach { slice ->
+        slices.take(3).forEach { slice ->
             val share = (slice.value * 100.0 / total).let { if (it < 1) "<1" else it.toInt().toString() }
             val chosen = slice.name == picked
             Row(
@@ -169,9 +169,9 @@ fun RingLabels(
                     color = if (chosen) Ink.text else Ink.muted)
             }
         }
-        if (slices.size > 5) {
+        if (slices.size > 3) {
             Text(
-                "and " + (slices.size - 5) + " more",
+                "and " + (slices.size - 3) + " more — tap the ring",
                 fontSize = 11.sp, color = Ink.muted,
                 modifier = Modifier.padding(start = 8.dp, top = 2.dp),
             )
