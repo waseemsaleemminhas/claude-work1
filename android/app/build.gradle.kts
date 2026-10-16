@@ -28,8 +28,8 @@ android {
         applicationId = "pk.ironclad.ledger"
         minSdk = 24
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.7.2"
+        versionCode = 15
+        versionName = "0.7.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
