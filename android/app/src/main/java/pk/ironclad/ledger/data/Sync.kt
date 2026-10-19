@@ -49,7 +49,13 @@ data class SyncPull(
     val rejected: Map<String, String> = emptyMap(),
     val addedCategories: List<String> = emptyList(),
     val bills: Map<String, String> = emptyMap(),
-    val receipts: Map<String, String> = emptyMap(),
+    /**
+     * Absent when the sheet is running a script from before bills existed, and
+     * an empty map when it is running a newer one with nothing to report. The
+     * difference is what stops a phone posting bills at a book that will only
+     * drop them.
+     */
+    val receipts: Map<String, String>? = null,
     val sheetUrl: String = "",
     val entries: List<Entry> = emptyList(),
     val categories: List<Category> = emptyList(),
@@ -94,7 +100,7 @@ object Sync {
         val book = repo.state.value
         // bills for vouchers the book already has, whose whereabouts it has not
         // told us yet — shrunk and capped, so a sync stays a quick round trip
-        val sending = Bills.waiting(
+        val sending = if (!prefs.bookTakesBills) emptyList() else Bills.waiting(
             context = context,
             bills = book.bills,
             known = book.billUrls.keys,
@@ -128,7 +134,10 @@ object Sync {
         repo.setPref("lastSync", answer.now.toString())
         if (answer.sheetUrl.isNotBlank()) repo.setPref("sheetUrl", answer.sheetUrl)
         // where every bill the book knows about lives, ours and the other phone's
-        answer.receipts.forEach { (id, where) -> repo.noteBillUrl(id, where) }
+        answer.receipts?.let { known ->
+            if (!prefs.bookTakesBills) repo.setPref("bookTakesBills", "yes")
+            known.forEach { (id, where) -> repo.noteBillUrl(id, where) }
+        }
         pk.ironclad.ledger.QuickEntryWidget.refresh(context)
 
         // What the book refused, and why, in its own words. Counting them and

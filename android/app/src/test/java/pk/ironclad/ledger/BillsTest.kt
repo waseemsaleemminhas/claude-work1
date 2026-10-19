@@ -5,7 +5,9 @@ import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -28,6 +30,7 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 class BillsTest {
 
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private lateinit var app: Application
     private lateinit var repo: Repo
 
@@ -56,6 +59,30 @@ class BillsTest {
 
     @After
     fun tearDown() = Repo.resetForTests()
+
+    @Test
+    fun `an older script is not posted bills it would only drop`() = runBlocking {
+        settle { repo.state.value.ready }
+        assertFalse("nothing assumed at the start", repo.state.value.prefs.bookTakesBills)
+
+        // a reply from a script that has never heard of bills leaves out the key
+        val older = json.decodeFromString(
+            pk.ironclad.ledger.data.SyncPull.serializer(),
+            """{"ok":true,"now":1,"accepted":[],"entries":[]}""",
+        )
+        assertNull("so we can tell, and hold the bills back", older.receipts)
+
+        // a newer one answers with the key, even when there is nothing in it
+        val newer = json.decodeFromString(
+            pk.ironclad.ledger.data.SyncPull.serializer(),
+            """{"ok":true,"now":1,"accepted":[],"entries":[],"receipts":{}}""",
+        )
+        assertEquals("and then we know it can keep them", emptyMap<String, String>(), newer.receipts)
+
+        repo.setPref("bookTakesBills", "yes")
+        settle { repo.state.value.prefs.bookTakesBills }
+        assertTrue(repo.state.value.prefs.bookTakesBills)
+    }
 
     @Test
     fun `a bill waits until its voucher is in the book`() {

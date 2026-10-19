@@ -24,6 +24,8 @@ data class Prefs(
     val sheetUrl: String = "",
     /** What the book refused last time, in its own words. */
     val lastRejected: String = "",
+    /** Whether the sheet's script is new enough to keep bills. */
+    val bookTakesBills: Boolean = false,
 ) {
     val onboarded: Boolean get() = me.isNotBlank()
     val canSync: Boolean get() = endpoint.isNotBlank()
@@ -94,6 +96,7 @@ class Repo private constructor(context: Context) {
                 lastSync = map["lastSync"]?.toLongOrNull() ?: 0,
                 sheetUrl = map["sheetUrl"].orEmpty(),
                 lastRejected = map["lastRejected"].orEmpty(),
+                bookTakesBills = map["bookTakesBills"] == "yes",
             ),
         )
     }.stateIn(scope, SharingStarted.Eagerly, LedgerState())
