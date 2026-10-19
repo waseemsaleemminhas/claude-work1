@@ -240,11 +240,21 @@ class Vm(app: Application) : AndroidViewModel(app) {
 
     fun dropBill() = editDraft { it.copy(bill = "") }
 
-    /** Hand a kept bill to whatever app on the phone can read it. */
-    fun openBill(name: String) = work("open the bill") {
+    /**
+     * Hand a kept bill to whatever app can read it. A bill somebody else's
+     * phone took in is not on this one, so that opens in Drive instead.
+     */
+    fun openBill(name: String, entryId: String = "") = work("open the bill") {
         val context = getApplication<Application>()
         val file = pk.ironclad.ledger.data.ShareIn.fileFor(context, name)
-        if (!file.exists()) { toast("That bill is not on this phone."); return@work }
+        if (!file.exists()) {
+            val inTheBook = repo.state.value.billUrls[entryId].orEmpty()
+            if (inTheBook.isBlank()) { toast("That bill is not on this phone yet."); return@work }
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(inTheBook)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            return@work
+        }
         val uri = androidx.core.content.FileProvider.getUriForFile(
             context, context.packageName + ".files", file,
         )
@@ -284,6 +294,7 @@ class Vm(app: Application) : AndroidViewModel(app) {
             calc = Calc.of(entry.lines.firstOrNull()?.amountMinor ?: entry.totalMinor),
         )
         val held = ledger.value.bills[entry.id].orEmpty()
+            .ifBlank { if (ledger.value.billUrls[entry.id].orEmpty().isNotBlank()) "in-the-book" else "" }
         set { it.copy(draft = opened.copy(origin = opened.stamp(), bill = held), catQuery = "") }
     }
 

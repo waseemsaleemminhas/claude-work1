@@ -28,6 +28,16 @@ data class SyncPush(
     val since: Long,
     val entries: List<Entry>,
     val categories: List<Category> = emptyList(),
+    val bills: List<BillUp> = emptyList(),
+)
+
+/** A bill on its way to the book: the file itself, against its voucher. */
+@Serializable
+data class BillUp(
+    val id: String,
+    val name: String,
+    val mime: String,
+    val data: String,
 )
 
 @Serializable
@@ -38,6 +48,8 @@ data class SyncPull(
     val accepted: List<String> = emptyList(),
     val rejected: Map<String, String> = emptyMap(),
     val addedCategories: List<String> = emptyList(),
+    val bills: Map<String, String> = emptyMap(),
+    val receipts: Map<String, String> = emptyMap(),
     val sheetUrl: String = "",
     val entries: List<Entry> = emptyList(),
     val categories: List<Category> = emptyList(),
@@ -79,11 +91,22 @@ object Sync {
 
         val mine = repo.dirtyEntries()
         val invented = repo.unsentCategories()
+        val book = repo.state.value
+        // bills for vouchers the book already has, whose whereabouts it has not
+        // told us yet — shrunk and capped, so a sync stays a quick round trip
+        val sending = Bills.waiting(
+            context = context,
+            bills = book.bills,
+            known = book.billUrls.keys,
+            unsent = book.unsent,
+            order = book.entries.sortedBy { it.at }.map { it.id },
+        )
         val body = json.encodeToString(
             SyncPush.serializer(),
             SyncPush(
                 code = prefs.code, device = prefs.me, since = prefs.lastSync,
                 entries = mine, categories = invented,
+                bills = sending.map { BillUp(it.id, it.name, it.mime, it.data) },
             ),
         )
 
@@ -104,6 +127,8 @@ object Sync {
         if (answer.accepted.isNotEmpty()) repo.markSynced(answer.accepted)
         repo.setPref("lastSync", answer.now.toString())
         if (answer.sheetUrl.isNotBlank()) repo.setPref("sheetUrl", answer.sheetUrl)
+        // where every bill the book knows about lives, ours and the other phone's
+        answer.receipts.forEach { (id, where) -> repo.noteBillUrl(id, where) }
         pk.ironclad.ledger.QuickEntryWidget.refresh(context)
 
         // What the book refused, and why, in its own words. Counting them and
@@ -128,6 +153,9 @@ object Sync {
         when {
             stillWrong.isNotEmpty() ->
                 "Sent $pushed, took back $pulled. " + rejectionNote(stillWrong)
+            answer.bills.isNotEmpty() ->
+                "Sent " + pushed + ", took back " + pulled + ", and " + answer.bills.size +
+                    (if (answer.bills.size == 1) " bill." else " bills.")
             pushed == 0 && pulled == 0 && answer.addedCategories.isEmpty() -> "Already up to date."
             answer.addedCategories.isNotEmpty() ->
                 "Sent $pushed, took back $pulled, and ${answer.addedCategories.size} new " +

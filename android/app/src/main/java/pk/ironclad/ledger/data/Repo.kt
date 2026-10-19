@@ -36,6 +36,8 @@ data class LedgerState(
     val unsent: Set<String> = emptySet(),
     /** The bill kept against an entry, by entry id. */
     val bills: Map<String, String> = emptyMap(),
+    /** Where the book keeps that bill, once it has taken it. */
+    val billUrls: Map<String, String> = emptyMap(),
     val categories: List<Category> = emptyList(),
     val accounts: List<Account> = emptyList(),
     val prefs: Prefs = Prefs(),
@@ -81,6 +83,7 @@ class Repo private constructor(context: Context) {
             categories = categories,
             accounts = withBalances(accounts, entries),
             bills = map.filterKeys { it.startsWith(BILL) }.mapKeys { it.key.removePrefix(BILL) },
+            billUrls = map.filterKeys { it.startsWith(BILL_AT) }.mapKeys { it.key.removePrefix(BILL_AT) },
             prefs = Prefs(
                 me = map["me"].orEmpty(),
                 myAccount = map["myAccount"].orEmpty(),
@@ -110,6 +113,10 @@ class Repo private constructor(context: Context) {
     /** Keep a shared bill against the voucher it belongs to. */
     suspend fun attachBill(entryId: String, fileName: String) =
         dao.putMeta(MetaRow(BILL + entryId, fileName))
+
+    /** Remember where the book put a bill, so it is not sent again. */
+    suspend fun noteBillUrl(entryId: String, url: String) =
+        dao.putMeta(MetaRow(BILL_AT + entryId, url))
 
     fun today(): String = LocalDate.now().toString()
 
@@ -208,6 +215,7 @@ class Repo private constructor(context: Context) {
         }
 
         const val BILL = "bill:"
+        const val BILL_AT = "billat:"
 
         fun resetForTests() = synchronized(this) {
             instance = null

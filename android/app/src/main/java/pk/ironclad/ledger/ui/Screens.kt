@@ -182,7 +182,7 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
     val first = entry.lines.firstOrNull()
     val category = first?.let { state.category(it.category) }
     val transfer = entry.type == Type.TRANSFER
-    val bill = state.bills[entry.id].orEmpty()
+    val bill = state.bills[entry.id].orEmpty().ifBlank { state.billUrls[entry.id].orEmpty() }
     val title = (if (transfer) "Moved money" else first?.category.orEmpty().ifBlank { "—" }) +
         (if (bill.isNotBlank()) "  📎" else "")
     val subtitle = if (transfer) "${entry.account} → ${entry.toAccount}"

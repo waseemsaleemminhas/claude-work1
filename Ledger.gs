@@ -109,7 +109,7 @@ const LG_PAGE = 3000;
 // Sheet columns. Found by name, so your own extra columns are left alone.
 const H_ENTRIES = ['ID', 'Date', 'Type', 'Status', 'Total', 'Account', 'To Account', 'Vendor',
   'Reference', 'Note', 'Campaigns', 'Categories', 'Entered By', 'Entered At', 'Changed At',
-  'Voided By', 'Voided At', 'Detail'];
+  'Voided By', 'Voided At', 'Detail', 'Receipt'];
 const H_LINES = ['Entry ID', 'Line', 'Date', 'Status', 'Type', 'Vendor', 'Paid From', 'Group',
   'Category', 'Cost Centre', 'Description', 'Qty', 'Unit Price', 'Amount', 'Entered By'];
 const H_ALLOCS = ['Entry ID', 'Line', 'Date', 'Status', 'Type', 'Group', 'Category', 'Campaign',
@@ -3336,6 +3336,51 @@ function takeCategories_(ss, person, sent, ctx) {
   return added;
 }
 
+/** The folder the bills go in, made once and found again by name. */
+function billFolder_() {
+  const name = 'Ironclad Tech Ledger — bills';
+  const found = DriveApp.getFoldersByName(name);
+  return found.hasNext() ? found.next() : DriveApp.createFolder(name);
+}
+
+/**
+ * Bills a phone has taken in and is handing over: the picture or the PDF
+ * itself, in base64, against the voucher it belongs to. Each one goes into a
+ * folder in Drive and its address goes in the voucher's Receipt cell, so the
+ * other phones and the sheet can all see it. A bill for a voucher that is not
+ * here yet is left for the next round, when it will be.
+ */
+function takeBills_(ss, person, sent, t) {
+  if (!sent || !sent.length) return {};
+  const done = {};
+  let folder = null;
+  sent.slice(0, 5).forEach(function (raw) {
+    const id = txt_(raw && raw.id, 40);
+    const data = raw && raw.data;
+    if (!id || !data) return;
+    const rowNumber = lgRowOf_(t, id);
+    if (!rowNumber) return;                       // the voucher is not here yet
+    const already = txt_(t.sh.getRange(rowNumber, t.col('Receipt')).getValue(), 400);
+    if (already) { done[id] = already; return; }  // somebody got there first
+    try {
+      if (!folder) folder = billFolder_();
+      const name = txt_(raw.name, 120) || (id + '.jpg');
+      const mime = txt_(raw.mime, 80) || 'application/octet-stream';
+      const blob = Utilities.newBlob(Utilities.base64Decode(data), mime, name);
+      const file = folder.createFile(blob);
+      const url = file.getUrl();
+      t.sh.getRange(rowNumber, t.col('Receipt')).setValue(url);
+      done[id] = url;
+    } catch (err) {
+      note_(ss, person, 'Could not keep a bill for ' + id + ': ' + err);
+    }
+  });
+  if (Object.keys(done).length) {
+    note_(ss, person, 'Kept ' + Object.keys(done).length + ' bill(s) in Drive.');
+  }
+  return done;
+}
+
 function syncLedger_(req) {
   return guarded_(req, function (ss, person) {
     const ctx = context_(ss);
@@ -3399,6 +3444,16 @@ function syncLedger_(req) {
       .filter(function (entry) { return !mine[entry.id] && entryChangedAt_(entry) > since; })
       .slice(0, 500);
 
+    const bills = takeBills_(ss, person, req.bills, t);
+    const receipts = {};
+    changed.forEach(function (e) {
+      const row = lgRowOf_(t, e.id);
+      if (!row) return;
+      const where = txt_(t.sh.getRange(row, t.col('Receipt')).getValue(), 400);
+      if (where) receipts[e.id] = where;
+    });
+    Object.keys(bills).forEach(function (id) { receipts[id] = bills[id]; });
+
     let url = '';
     try { url = ss.getUrl(); } catch (err) { url = ''; }
 
@@ -3408,6 +3463,8 @@ function syncLedger_(req) {
       accepted: accepted,
       rejected: rejected,
       addedCategories: newCategories,
+      bills: bills,
+      receipts: receipts,
       sheetUrl: url,
       entries: changed,
       campaigns: ctx.campaignList,

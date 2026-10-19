@@ -244,16 +244,18 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
                     if (pk.ironclad.ledger.data.ShareIn.isImage(draft.bill)) "🧾" else "📄",
                     fontSize = 20.sp,
                 )
+                val onTheBook = state.billUrls[draft.id].orEmpty().isNotBlank()
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                     Text("Bill attached", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Ink.text)
                     Text(
                         (if (file.exists()) (file.length() / 1024).toString() + " KB · " else "") +
-                            draft.bill.substringAfterLast('.').uppercase(),
-                        fontSize = 11.sp, color = Ink.muted,
+                            draft.bill.substringAfterLast('.').uppercase() +
+                            (if (onTheBook) " · in the book" else " · on this phone"),
+                        fontSize = 11.sp, color = if (onTheBook) Ink.good else Ink.muted,
                     )
                 }
                 Box(
-                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.openBill(draft.bill) }
+                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.openBill(draft.bill, draft.id) }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) { Text("View", fontSize = 12.sp, color = Ink.brand, fontWeight = FontWeight.SemiBold) }
                 Box(
