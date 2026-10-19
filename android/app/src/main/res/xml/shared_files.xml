@@ -2,4 +2,6 @@
 <paths>
     <!-- Only the one folder the export is written to. -->
     <cache-path name="export" path="export/" />
+    <!-- bills shared in from other apps, so they can be opened again -->
+    <files-path name="bills" path="bills/" />
 </paths>

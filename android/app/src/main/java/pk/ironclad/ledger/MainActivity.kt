@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import pk.ironclad.ledger.data.LedgerState
+import pk.ironclad.ledger.data.ShareIn
 import pk.ironclad.ledger.data.Type
 import pk.ironclad.ledger.ui.AccountsScreen
 import pk.ironclad.ledger.ui.Chip
@@ -88,17 +89,23 @@ class MainActivity : ComponentActivity() {
     /** What the home-screen widget asked for, if the app was opened from it. */
     private val quickEntry = mutableStateOf<String?>(null)
 
+    /** A bill shared in from another app, copied before the sender forgets it. */
+    private val shared = mutableStateOf(ShareIn.Shared())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         quickEntry.value = askedFor(intent)
-        setContent { LedgerTheme { App(quickEntry = quickEntry) } }
+        // taken now, while the permission to read it still stands
+        shared.value = ShareIn.take(this, intent)
+        setContent { LedgerTheme { App(quickEntry = quickEntry, shared = shared) } }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         quickEntry.value = askedFor(intent)
+        ShareIn.take(this, intent).let { if (!it.empty) shared.value = it }
     }
 
     private fun askedFor(intent: Intent?): String? =
@@ -111,7 +118,11 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mutableStateOf(null) }) {
+fun App(
+    vm: Vm = viewModel(),
+    quickEntry: MutableState<String?> = remember { mutableStateOf(null) },
+    shared: MutableState<ShareIn.Shared> = remember { mutableStateOf(ShareIn.Shared()) },
+) {
     val context = LocalContext.current
     var crashReport by remember { mutableStateOf(Crash.last(context)) }
     if (crashReport != null) {
@@ -131,6 +142,15 @@ fun App(vm: Vm = viewModel(), quickEntry: MutableState<String?> = remember { mut
         if (kind != null && state.ready && state.prefs.onboarded) {
             vm.startEntry(kind)
             quickEntry.value = null
+        }
+    }
+
+    // A bill shared in: open an entry holding it, once the book is open.
+    LaunchedEffect(shared.value, state.ready, state.prefs.onboarded) {
+        val came = shared.value
+        if (!came.empty && state.ready && state.prefs.onboarded) {
+            vm.startFromShare(came)
+            shared.value = ShareIn.Shared()
         }
     }
 

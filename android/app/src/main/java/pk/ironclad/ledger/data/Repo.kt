@@ -34,6 +34,8 @@ data class LedgerState(
     val entries: List<Entry> = emptyList(),
     /** Entries still waiting to reach the shared book. */
     val unsent: Set<String> = emptySet(),
+    /** The bill kept against an entry, by entry id. */
+    val bills: Map<String, String> = emptyMap(),
     val categories: List<Category> = emptyList(),
     val accounts: List<Account> = emptyList(),
     val prefs: Prefs = Prefs(),
@@ -78,6 +80,7 @@ class Repo private constructor(context: Context) {
             unsent = unsent,
             categories = categories,
             accounts = withBalances(accounts, entries),
+            bills = map.filterKeys { it.startsWith(BILL) }.mapKeys { it.key.removePrefix(BILL) },
             prefs = Prefs(
                 me = map["me"].orEmpty(),
                 myAccount = map["myAccount"].orEmpty(),
@@ -103,6 +106,10 @@ class Repo private constructor(context: Context) {
     }
 
     suspend fun setPref(key: String, value: String) = dao.putMeta(MetaRow(key, value))
+
+    /** Keep a shared bill against the voucher it belongs to. */
+    suspend fun attachBill(entryId: String, fileName: String) =
+        dao.putMeta(MetaRow(BILL + entryId, fileName))
 
     fun today(): String = LocalDate.now().toString()
 
@@ -199,6 +206,8 @@ class Repo private constructor(context: Context) {
         fun get(context: Context): Repo = instance ?: synchronized(this) {
             instance ?: Repo(context).also { instance = it }
         }
+
+        const val BILL = "bill:"
 
         fun resetForTests() = synchronized(this) {
             instance = null

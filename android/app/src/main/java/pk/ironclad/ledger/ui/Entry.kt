@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -227,6 +228,40 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
 
         Box(Modifier.size(10.dp))
         Chip("📅  " + dateLabel(draft.date)) { vm.set { it.copy(datePickerOpen = true) } }
+
+        if (draft.bill.isNotBlank()) {
+            val context = LocalContext.current
+            val file = pk.ironclad.ledger.data.ShareIn.fileFor(context, draft.bill)
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Ink.good.copy(alpha = 0.14f))
+                    .border(1.dp, Ink.good.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (pk.ironclad.ledger.data.ShareIn.isImage(draft.bill)) "🧾" else "📄",
+                    fontSize = 20.sp,
+                )
+                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                    Text("Bill attached", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Ink.text)
+                    Text(
+                        (if (file.exists()) (file.length() / 1024).toString() + " KB · " else "") +
+                            draft.bill.substringAfterLast('.').uppercase(),
+                        fontSize = 11.sp, color = Ink.muted,
+                    )
+                }
+                Box(
+                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.openBill(draft.bill) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) { Text("View", fontSize = 12.sp, color = Ink.brand, fontWeight = FontWeight.SemiBold) }
+                Box(
+                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.dropBill() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) { Text("Remove", fontSize = 12.sp, color = Ink.bad) }
+            }
+        }
 
         // A proper row you can hit with a thumb, not a line of text to aim at.
         val filled = listOf(draft.vendor, draft.reference, line.description, draft.note).count { it.isNotBlank() }

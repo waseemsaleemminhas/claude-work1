@@ -108,6 +108,8 @@ data class Draft(
     val calc: Calc = Calc(),
     val more: Boolean = false,
     val armed: Boolean = false,
+    /** A bill shared in from another app, waiting to be kept with this entry. */
+    val bill: String = "",
     /** What an entry opened for a look held when it was opened. */
     val origin: String = "",
 ) {
@@ -209,6 +211,50 @@ class Vm(app: Application) : AndroidViewModel(app) {
      * ready to use and the date chip is there for the cost that is being
      * written up late. [askDate] opens the calendar first instead.
      */
+    /**
+     * Something shared in from another app: a photo of a bill, a PDF invoice,
+     * or the words of a payment message. The file is already ours by now; this
+     * opens an entry holding it, with whatever the words gave us filled in.
+     */
+    fun startFromShare(shared: pk.ironclad.ledger.data.ShareIn.Shared) {
+        if (shared.empty) return
+        startEntry(Type.EXPENSE)
+        val amount = pk.ironclad.ledger.data.ShareIn.amountIn(shared.text)
+        editDraft { draft ->
+            draft.copy(
+                bill = shared.file,
+                note = shared.text.take(200),
+                more = shared.text.isNotBlank(),
+                calc = if (amount > 0) Calc.of(amount) else draft.calc,
+            )
+        }
+        toast(
+            when {
+                shared.file.isNotBlank() && amount > 0 -> "Bill kept, and an amount found in it. Check it."
+                shared.file.isNotBlank() -> "Bill kept. Pick a category and the amount."
+                amount > 0 -> "An amount was found in that. Check it."
+                else -> "Pick a category and the amount."
+            },
+        )
+    }
+
+    fun dropBill() = editDraft { it.copy(bill = "") }
+
+    /** Hand a kept bill to whatever app on the phone can read it. */
+    fun openBill(name: String) = work("open the bill") {
+        val context = getApplication<Application>()
+        val file = pk.ironclad.ledger.data.ShareIn.fileFor(context, name)
+        if (!file.exists()) { toast("That bill is not on this phone."); return@work }
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".files", file,
+        )
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, if (pk.ironclad.ledger.data.ShareIn.isImage(name)) "image/*" else "application/pdf")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
     fun startEntry(type: String = Type.EXPENSE, category: String = "", askDate: Boolean = false) {
         val state = ledger.value
         val account = state.prefs.myAccount.takeIf { name -> state.liveAccounts.any { it.name == name } }
@@ -237,7 +283,8 @@ class Vm(app: Application) : AndroidViewModel(app) {
             line = entry.lines.firstOrNull() ?: Line(),
             calc = Calc.of(entry.lines.firstOrNull()?.amountMinor ?: entry.totalMinor),
         )
-        set { it.copy(draft = opened.copy(origin = opened.stamp()), catQuery = "") }
+        val held = ledger.value.bills[entry.id].orEmpty()
+        set { it.copy(draft = opened.copy(origin = opened.stamp(), bill = held), catQuery = "") }
     }
 
     fun closeEntry() = set {
@@ -324,6 +371,8 @@ class Vm(app: Application) : AndroidViewModel(app) {
         )
         work("save that") {
             val saved = repo.save(entry)
+            // the bill the voucher came with, kept against its id
+            if (draft.bill.isNotBlank()) repo.attachBill(saved.id, draft.bill)
             closeEntry()
             toast(if (draft.editing) "Saved." else "Added " + state.money(saved.totalMinor))
             QuickEntryWidget.refresh(getApplication())
