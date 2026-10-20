@@ -90,6 +90,18 @@ fun HomeScreen(vm: Vm, state: LedgerState, ui: Ui) {
                             ) { vm.go(Screen.ACCOUNTS) }
                         }
                     }
+                    // The offer sits on the seam between the two of them,
+                    // because that is what it does: move money across it.
+                    handoverPair(state)?.let { (mine, theirs) ->
+                        Box(
+                            Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            HandoverPill(theirs.heldBy.ifBlank { theirs.name }) {
+                                vm.handCashOver(mine.name, theirs.name)
+                            }
+                        }
+                    }
                 }
 
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

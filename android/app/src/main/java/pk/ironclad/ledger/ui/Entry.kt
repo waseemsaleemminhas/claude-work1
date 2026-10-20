@@ -303,6 +303,30 @@ fun EntrySheet(vm: Vm, state: LedgerState, ui: Ui, draft: Draft) {
             Field("Note", draft.note) { value -> vm.editDraft { it.copy(note = value) } }
         }
 
+        // The notes people actually hand over. Four taps of these beat eleven
+        // taps of digits for the amounts this book is full of.
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            listOf(100L, 500L, 1000L, 5000L).forEach { amount ->
+                Box(
+                    Modifier.weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Ink.card2)
+                        .border(BorderStroke(1.dp, Ink.line), RoundedCornerShape(10.dp))
+                        .clickable { vm.bump(amount) }
+                        .padding(vertical = 9.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "+" + quickLabel(amount), fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold, color = Ink.text, maxLines = 1,
+                    )
+                }
+            }
+        }
+
         Keypad(vm)
 
         val saveLabel = when {
@@ -442,3 +466,7 @@ private fun Keypad(vm: Vm) {
         }
     }
 }
+
+/** "5,000" — the quick-add buttons, grouped the way the amount above them is. */
+internal fun quickLabel(rupees: Long): String =
+    pk.ironclad.ledger.data.Money.format(rupees * 100, "", 0).trim()

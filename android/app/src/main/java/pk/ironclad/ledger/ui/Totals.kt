@@ -74,3 +74,51 @@ data class Budgeted(val category: pk.ironclad.ledger.data.Category, val spentMin
     val share: Float get() = if (budgetMinor <= 0) 0f else spentMinor.toFloat() / budgetMinor.toFloat()
     val over: Boolean get() = spentMinor > budgetMinor
 }
+
+/**
+ * What the account an entry was paid from held immediately after it, by entry
+ * id — the balance column of a passbook.
+ *
+ * Reckoned over the whole book in date order, never over the days on screen: a
+ * figure that changed every time the period changed would be worse than no
+ * figure at all. An entry against an account the book does not know gets none,
+ * for the same reason the balances on Money we hold skip it.
+ */
+fun runningBalances(state: LedgerState): Map<String, Long> {
+    val held = state.accounts.associate { it.name to it.openingMinor }.toMutableMap()
+    val after = mutableMapOf<String, Long>()
+    state.entries
+        .filter { it.status != Status.VOID }
+        .sortedWith(compareBy<Entry> { it.date }.thenBy { it.at })
+        .forEach { entry ->
+            when (entry.type) {
+                Type.INCOME -> held[entry.account]?.let { held[entry.account] = it + entry.totalMinor }
+                Type.EXPENSE -> held[entry.account]?.let { held[entry.account] = it - entry.totalMinor }
+                Type.TRANSFER -> {
+                    held[entry.account]?.let { held[entry.account] = it - entry.totalMinor }
+                    held[entry.toAccount]?.let { held[entry.toAccount] = it + entry.totalMinor }
+                }
+            }
+            held[entry.account]?.let { after[entry.id] = it }
+        }
+    return after
+}
+
+/**
+ * Who would be handing cash to whom: out of mine, into the other person's.
+ *
+ * Nothing is offered until the app has been told which money is mine. Guessing
+ * the direction — by whichever account happens to sort first — would put
+ * handovers in the book backwards, and a cash book pointed the wrong way is
+ * worse than one that said nothing.
+ */
+fun handoverPair(state: LedgerState): Pair<pk.ironclad.ledger.data.Account, pk.ironclad.ledger.data.Account>? {
+    val cash = state.liveAccounts
+    if (cash.size < 2) return null
+    val mine = cash.firstOrNull { it.name == state.prefs.myAccount } ?: return null
+    // somebody else's pocket before a bank: this is about cash changing hands
+    val theirs = cash.firstOrNull { it.name != mine.name && it.heldBy.isNotBlank() }
+        ?: cash.firstOrNull { it.name != mine.name }
+        ?: return null
+    return mine to theirs
+}

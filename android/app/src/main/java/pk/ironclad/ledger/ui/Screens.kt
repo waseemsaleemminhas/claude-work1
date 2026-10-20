@@ -81,6 +81,8 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
     val entries = if (ui.who.isBlank()) everything else everything.filter { it.enteredBy.trim() == ui.who }
     val totals = totalsOf(entries)
     val today = LocalDate.now()
+    // What each account held after each voucher, over the whole book
+    val balances = runningBalances(state)
 
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -142,7 +144,10 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
                     if (net != 0L) (if (net > 0) "+" else "") + state.money(net) else "",
                 )
             }
-            items(dayEntries.size) { i -> EntryRow(vm, state, ui, dayEntries[i]) }
+            items(dayEntries.size) { i ->
+                val entry = dayEntries[i]
+                EntryRow(vm, state, ui, entry, balances[entry.id])
+            }
         }
         // room for the footer, so the last voucher is never hidden behind it
         item { Box(Modifier.size(124.dp)) }
@@ -176,7 +181,7 @@ fun RecordsScreen(vm: Vm, state: LedgerState, ui: Ui) {
 }
 
 @Composable
-fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
+fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry, balanceAfter: Long? = null) {
     val refused = ui.refused[entry.id]
     val waiting = entry.id in state.unsent
     val first = entry.lines.firstOrNull()
@@ -185,8 +190,11 @@ fun EntryRow(vm: Vm, state: LedgerState, ui: Ui, entry: Entry) {
     val bill = state.bills[entry.id].orEmpty().ifBlank { state.billUrls[entry.id].orEmpty() }
     val title = (if (transfer) "Moved money" else first?.category.orEmpty().ifBlank { "—" }) +
         (if (bill.isNotBlank()) "  📎" else "")
+    // What was left in that account afterwards, next to the account it belongs
+    // to — a balance on its own says nothing about whose money it is.
+    val where = entry.account + (balanceAfter?.let { " ▸ " + state.money(it) } ?: "")
     val subtitle = if (transfer) "${entry.account} → ${entry.toAccount}"
-    else listOf(entry.vendor, entry.account, first?.description.orEmpty())
+    else listOf(entry.vendor, where, first?.description.orEmpty())
         .filter { it.isNotBlank() }.joinToString(" · ")
     ListRow(
         icon = if (transfer) "🔁" else category?.icon ?: "•",
@@ -307,6 +315,20 @@ fun AccountsScreen(vm: Vm, state: LedgerState) {
             val account = shown[i]
             val stranded = account.archived && account.balanceMinor != 0L
             AccountCard(vm, state, account, stranded)
+            // Between one person's card and the next, where the cash goes.
+            if (i == 0 && shown.size > 1) {
+                // in the gap between the two of them, which is what it crosses
+                handoverPair(state)?.let { (mine, theirs) ->
+                    Box(
+                        Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        HandoverPill(theirs.heldBy.ifBlank { theirs.name }) {
+                            vm.handCashOver(mine.name, theirs.name)
+                        }
+                    }
+                }
+            }
         }
         item {
             Column {

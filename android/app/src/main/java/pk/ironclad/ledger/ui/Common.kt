@@ -132,7 +132,15 @@ internal fun sliceAt(slices: List<Slice>, total: Long, at: Offset, middle: Offse
     return slices.lastOrNull()?.name.orEmpty()
 }
 
-/** The slices spelled out, because a colour on its own says nothing. */
+/** How many categories are spelled out before the rest are a tap on the ring away. */
+const val RANKED = 6
+
+/**
+ * The slices spelled out, each row filled to the width of what it cost against
+ * the heaviest one. Six bars can be read at a glance where six arcs cannot:
+ * the ring says what shape the month is, these say what the numbers are. The
+ * fill is the row itself, so the bars cost no height over a plain list.
+ */
 @Composable
 fun RingLabels(
     slices: List<Slice>,
@@ -143,39 +151,76 @@ fun RingLabels(
     modifier: Modifier = Modifier,
 ) {
     if (slices.isEmpty() || total <= 0) return
+    val shown = slices.take(RANKED)
+    val heaviest = shown.maxOf { it.value }.coerceAtLeast(1L)
     Column(modifier.fillMaxWidth().padding(top = 8.dp)) {
-        slices.take(3).forEach { slice ->
+        shown.forEach { slice ->
             val share = (slice.value * 100.0 / total).let { if (it < 1) "<1" else it.toInt().toString() }
             val chosen = slice.name == picked
-            Row(
-                Modifier.fillMaxWidth()
+            Box(
+                Modifier.fillMaxWidth().padding(bottom = 3.dp).height(28.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (chosen) Ink.card2 else Color.Transparent)
-                    .clickable { onPick(if (chosen) "" else slice.name) }
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .background(Ink.card)
+                    .clickable { onPick(if (chosen) "" else slice.name) },
             ) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(slice.colour))
-                Text(
-                    (if (slice.icon.isNotBlank()) slice.icon + "  " else "") + slice.name,
-                    fontSize = 12.sp, color = if (chosen) Ink.text else Ink.muted,
-                    fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                Box(
+                    Modifier.fillMaxHeight()
+                        .fillMaxWidth((slice.value.toFloat() / heaviest.toFloat()).coerceIn(0.015f, 1f))
+                        .background(slice.colour.copy(alpha = if (chosen) 0.38f else 0.22f)),
                 )
-                Text(share + "%", fontSize = 11.sp, color = Ink.muted,
-                    modifier = Modifier.padding(end = 8.dp))
-                Text(money(slice.value), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                    color = if (chosen) Ink.text else Ink.muted)
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(slice.colour))
+                    Text(
+                        (if (slice.icon.isNotBlank()) slice.icon + "  " else "") + slice.name,
+                        fontSize = 12.sp, color = if (chosen) Ink.text else Ink.muted,
+                        fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                    )
+                    Text(share + "%", fontSize = 11.sp, color = Ink.muted,
+                        modifier = Modifier.padding(end = 8.dp))
+                    Text(money(slice.value), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        color = if (chosen) Ink.text else Ink.muted)
+                }
             }
         }
-        if (slices.size > 3) {
+        if (slices.size > RANKED) {
             Text(
-                "and " + (slices.size - 3) + " more — tap the ring",
+                "and " + (slices.size - RANKED) + " more — tap the ring",
                 fontSize = 11.sp, color = Ink.muted,
                 modifier = Modifier.padding(start = 8.dp, top = 2.dp),
             )
         }
+    }
+}
+
+/**
+ * Handing cash over, offered in the gap between the two people it moves
+ * between. One of us takes the money in and the other spends it, so cash
+ * crossing from one pocket to the other is the second commonest thing in this
+ * book — and until now it was buried behind Move money on another screen.
+ */
+@Composable
+fun HandoverPill(to: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .clip(CircleShape)
+            .background(Ink.card2)
+            .border(BorderStroke(1.dp, Ink.brand.copy(alpha = 0.45f)), CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("⇄", fontSize = 13.sp, color = Ink.brand)
+        Text(
+            if (to.isBlank()) "Hand cash over" else "Hand cash to " + to,
+            fontSize = 12.sp, color = Ink.text, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 7.dp),
+        )
     }
 }
 

@@ -114,12 +114,34 @@ class ChartTest {
             }
         }
         compose.waitForIdle()
-        // the top three are spelled out; the rest are a tap on the ring away
-        listOf("Rent", "Salaries", "Internet").forEach {
+        // six fit, so four are all spelled out and nothing is held back
+        listOf("Rent", "Salaries", "Internet", "Fuel").forEach {
             compose.onNodeWithText(it, substring = true).assertExists()
         }
-        compose.onNodeWithText("and 1 more", substring = true).assertExists()
+        compose.onAllNodesWithText("and ", substring = true).fetchSemanticsNodes().let {
+            assertTrue("nothing left over", it.isEmpty())
+        }
         compose.onAllNodesWithText("25%")[0].assertExists()
+    }
+
+    @Test
+    fun `past six categories the rest are a tap on the ring away`() {
+        val many = (1..8).map { Slice(100L * it, Color.Red, "Cost " + it) }
+            .sortedByDescending { it.value }
+        compose.setContent {
+            LedgerTheme {
+                RingLabels(many, many.sumOf { it.value }, { "Rs " + it }, "", { vm.pickSlice(it) })
+            }
+        }
+        compose.waitForIdle()
+        // the heaviest six, biggest first
+        listOf("Cost 8", "Cost 7", "Cost 6", "Cost 5", "Cost 4", "Cost 3").forEach {
+            compose.onNodeWithText(it, substring = true).assertExists()
+        }
+        compose.onAllNodesWithText("Cost 1", substring = true).fetchSemanticsNodes().let {
+            assertTrue("the smallest two are not spelled out", it.isEmpty())
+        }
+        compose.onNodeWithText("and 2 more", substring = true).assertExists()
     }
 
     @Test

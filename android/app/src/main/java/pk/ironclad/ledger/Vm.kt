@@ -349,6 +349,25 @@ class Vm(app: Application) : AndroidViewModel(app) {
     fun operate(op: Char) = editDraft { it.copy(calc = it.calc.operate(op)) }
     fun backspace() = editDraft { it.copy(calc = it.calc.back()) }
 
+    /**
+     * A round amount in one tap. Cash here moves in hundreds and thousands, and
+     * five hundred is quicker to hand over than to type. It adds to whatever is
+     * already on the keypad, so 1,500 is +1,000 then +500, and it settles any
+     * sum part-way through first.
+     */
+    fun bump(rupees: Long) = editDraft { draft ->
+        draft.copy(calc = Calc.of(draft.calc.amountMinor + rupees * 100))
+    }
+
+    /**
+     * Cash passing from one person's hand to the other, with both ends already
+     * filled in. It is a move, not spending: it never touches the month.
+     */
+    fun handCashOver(from: String, to: String) {
+        startEntry(Type.TRANSFER)
+        editDraft { it.copy(account = from, toAccount = to) }
+    }
+
     fun save() {
         val draft = ui.value.draft ?: return
         val state = ledger.value

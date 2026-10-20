@@ -38,20 +38,33 @@ class AccountsTest {
     private lateinit var repo: Repo
     private lateinit var vm: Vm
 
-    private fun settle(until: () -> Boolean = { repo.state.value.ready && repo.state.value.accounts.isNotEmpty() }) {
-        repeat(200) {
+    /**
+     * Wait for the book to reach the state about to be asserted on. Room hands
+     * its snapshots over on its own schedule, and under a full suite that can
+     * take longer than it does alone.
+     *
+     * If it never arrives the wait says so. Carrying on regardless is how a
+     * test that waited for one thing ends up failing three lines later with a
+     * figure nobody can account for.
+     */
+    private fun settle(
+        what: String = "the book to be ready",
+        until: () -> Boolean = { repo.state.value.ready && repo.state.value.accounts.isNotEmpty() },
+    ) {
+        repeat(600) {
             shadowOf(Looper.getMainLooper()).idle()
             if (until()) return
             Thread.sleep(25)
         }
         shadowOf(Looper.getMainLooper()).idle()
+        if (!until()) throw AssertionError("waited 15s for " + what + ", and it never came")
     }
 
     /** What a sync brings down after the Accounts tab has been tidied. */
     private suspend fun fromSheet(vararg accounts: Account) {
         repo.acceptFromServer(emptyList(), emptyList(), accounts.toList())
         // the sheet's copy in, our stand-in of the same name gone: one row each
-        settle {
+        settle("the sheet's accounts to replace the ones we started with") {
             accounts.all { a ->
                 repo.state.value.accounts.count { it.name == a.name } == 1 &&
                     repo.state.value.accounts.any { it.name == a.name && it.id == a.id }
@@ -145,7 +158,7 @@ class AccountsTest {
         // one of the entries taken after it, so the sum is briefly wrong before
         // settling. The app corrects itself in milliseconds; the test waits for
         // the state it promises rather than the first one it sees.
-        settle {
+        settle("the move to land on both accounts") {
             val now = repo.state.value
             now.entries.isNotEmpty() && now.accounts.firstOrNull { it.name == "Petty cash" }?.balanceMinor == 0L
         }
